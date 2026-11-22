@@ -19,7 +19,7 @@ if(m.type==='create'||m.type==='join'){if(room)return;let r=m.type==='join'?room
 if(!room)return;
 if(m.type==='avatar'){const a=safeAvatar(m.avatar);if(a){room.players.get(id).avatar=a;update(room)}}
 if(m.type==='start'&&room.host===id&&!room.started){room.started=true;spawn(room);update(room)}
-if(m.type==='move'&&room.started){const p=room.players.get(id),x=Number(m.x),y=Number(m.y);if(p&&valid(room,x,y)&&Math.hypot(x-p.x,y-p.y)<1.2){p.x=x;p.y=y;update(room)}}
+if(m.type==='move'){const p=room.players.get(id),x=Number(m.x),y=Number(m.y);if(p&&valid(room,x,y)&&Math.hypot(x-p.x,y-p.y)<1.2){p.x=x;p.y=y;update(room)}}
 if(m.type==='next'&&room.started&&room.host===id&&room.solved){room.level=Math.min(100,room.level+1);room.solved=false;spawn(room);update(room)}
 if(m.type==='reset'&&room.started&&room.host===id){room.solved=false;spawn(room);update(room)}
 });ws.on('close',()=>{if(!room)return;room.players.delete(id);if(!room.players.size)rooms.delete(room.code);else{if(room.host===id)room.host=room.players.keys().next().value;room.solved=false;update(room)}})});
