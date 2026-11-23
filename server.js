@@ -11,7 +11,7 @@ const names=['THE LONG WAY','THE DIVIDE','CIRCUIT','CROSS CURRENT','THE FINAL PA
 const blindLevel=i=>(i+1)%10===0;
 const maps=Array.from({length:50},(_,i)=>{
  const mechanic=['plates','gate','timer','sequence','keys','hybrid','memory','dual','reverse','gauntlet','master'][Math.min(10,Math.floor(i/4))];
- const requirements=i<4?[]:i<8?['levers']:i<12?['levers','timer']:i<16?['levers','sequence']:i<20?['levers','sequence','tokens']:i<24?['levers','sequence','tokens']:i<28?['levers','sequence','tokens','memory']:i<32?['levers','sequence','tokens','memory']:i<36?['levers','sequence','tokens','memory','reverse']:['levers','sequence','tokens','memory','reverse'];
+ const requirements=i<4?[]:i<8?['levers']:i<12?['levers','timer']:i<16?['levers','sequence']:i<20?['levers','sequence','tokens']:i<24?['levers','sequence','tokens']:i<28?['levers','sequence','tokens','reverse']:i<32?['levers','sequence','tokens','reverse']:i<36?['levers','sequence','tokens','reverse','handoff']:i<42?['levers','sequence','tokens','reverse','handoff','echo']:['levers','sequence','tokens','reverse','handoff','echo','sweep'];
  if(blindLevel(i)){const t=requirements.indexOf('timer');if(t>=0)requirements.splice(t,1)}
  const special=i===29;
  let seed=(7919+i*104729)>>>0;
@@ -22,7 +22,7 @@ const maps=Array.from({length:50},(_,i)=>{
  const reachable=()=>{const seen=new Set(['2,4']),q=[[2,4]];for(let n=0;n<q.length;n++){const [x,y]=q[n];for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const xx=x+dx,yy=y+dy,k=xx+','+yy;if(xx<2||xx>maxX||yy<1||yy>maxY||seen.has(k)||walls.has(k))continue;seen.add(k);q.push([xx,yy])}}return seen};
  // Room one is completely open. Later rooms add more randomized walls,
  // accepting a wall only when every remaining floor tile stays accessible.
- const target=i===0?0:blind?Math.floor(area*.49):Math.min(53,4+Math.floor(i*2.05));
+ const target=i===0?0:blind?Math.floor(area*.38):Math.min(33,4+Math.floor(i*1.25));
  for(let attempt=0;attempt<(blind?4000:600)&&walls.size<target;attempt++){
   const [x,y]=all[Math.floor(rand()*all.length)],key=x+','+y;
   if(walls.has(key))continue;
@@ -30,17 +30,17 @@ const maps=Array.from({length:50},(_,i)=>{
   if(reachable().size!==area-walls.size)walls.delete(key);
  }
  const distances=new Map([['2,4',0]]),q=[[2,4]];
- for(let n=0;n<q.length;n++){const [x,y]=q[n],d=distances.get(x+','+y);for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const xx=x+dx,yy=y+dy,k=xx+','+yy;if(xx<2||xx>12||yy<1||yy>7||walls.has(k)||distances.has(k))continue;distances.set(k,d+1);q.push([xx,yy])}}
+ for(let n=0;n<q.length;n++){const [x,y]=q[n],d=distances.get(x+','+y);for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const xx=x+dx,yy=y+dy,k=xx+','+yy;if(xx<2||xx>maxX||yy<1||yy>maxY||walls.has(k)||distances.has(k))continue;distances.set(k,d+1);q.push([xx,yy])}}
  const choices=[...distances].filter(([k,d])=>d>=5&&Number(k.split(',')[0])>=5).sort((a,b)=>b[1]-a[1]);
  const pick=(offset,excluded=[])=>{const filtered=choices.filter(([k])=>!excluded.includes(k));const key=filtered[Math.min(filtered.length-1,Math.floor(rand()*Math.min(filtered.length,Math.max(3,offset))))]?.[0]||'10,4';return key.split(',').map(Number)};
- const plateA=pick(3);const far=choices.filter(([key])=>{const [x,y]=key.split(',').map(Number);return Math.hypot(x-plateA[0],y-plateA[1])>= (blind?12:5)});const plateB=(far[Math.floor(rand()*Math.min(far.length,12))]?.[0]||choices.find(([key])=>{const [x,y]=key.split(',').map(Number);return Math.hypot(x-plateA[0],y-plateA[1])>=4})?.[0]||'11,2').split(',').map(Number);
+ const plateA=pick(3);const far=choices.filter(([key])=>{const [x,y]=key.split(',').map(Number);return Math.hypot(x-plateA[0],y-plateA[1])>= (blind?10:5)});const plateB=(far[Math.floor(rand()*Math.min(far.length,12))]?.[0]||choices.find(([key])=>{const [x,y]=key.split(',').map(Number);return Math.hypot(x-plateA[0],y-plateA[1])>=4})?.[0]||'11,2').split(',').map(Number);
  const used=[plateA.join(','),plateB.join(',')];
  const choose=(minDistance=3)=>{const pool=choices.filter(([key])=>{const [x,y]=key.split(',').map(Number);return !used.includes(key)&&used.every(k=>{const [a,b]=k.split(',').map(Number);return Math.hypot(x-a,y-b)>=minDistance})});const key=(pool[Math.floor(rand()*Math.min(18,pool.length))]||choices.find(([k])=>!used.includes(k))||['10,4'])[0];used.push(key);return key.split(',').map(Number)};
  const levers=Array.from({length:requirements.includes('levers')?Math.min(6,2+Math.floor(i/8)):0},()=>choose(3));
  const tokens=Array.from({length:requirements.includes('tokens')?Math.min(5,2+Math.floor(i/9)):0},()=>choose(2));
  const lever=levers[0]||choose(),token=tokens[0]||choose();
- const order=levers.map((_,k)=>k).sort(()=>rand()-.5);
- const tokenOrder=tokens.map((_,k)=>k).sort(()=>rand()-.5);
+ const order=levers.map((_,k)=>k);for(let k=order.length-1;k>0;k--){const n=Math.floor(rand()*(k+1));[order[k],order[n]]=[order[n],order[k]]}
+ const tokenOrder=tokens.map((_,k)=>k);for(let k=tokenOrder.length-1;k>0;k--){const n=Math.floor(rand()*(k+1));[tokenOrder[k],tokenOrder[n]]=[tokenOrder[n],tokenOrder[k]]}
  return {name:names[i]||'CHAMBER '+String(i+1).padStart(2,'0'),hint:({plates:'Find both switches.',gate:'Activate the relay before finishing.',timer:'The relay has a time limit.',sequence:'Touch the marked switches in order.',keys:'Collect the token before finishing.',hybrid:'Combine the previous mechanics.'})[mechanic],plates:[plateA,plateB],walls:[...walls].map(k=>k.split(',').map(Number)),mechanic,requirements,levers,tokens,order,tokenOrder,lever,token,blind,maxX,maxY,duration:Math.max(3000,9000-(i-8)*220),difficulty:Number(Math.pow(1.5,i/4).toFixed(2))};
 });
 const server=http.createServer((req,res)=>{let u;try{u=decodeURIComponent(new URL(req.url,'http://localhost').pathname)}catch{res.writeHead(400);return res.end()}const p=path.resolve(root,'.'+(u==='/'?'/index.html':u));if(!p.startsWith(root+path.sep)){res.writeHead(403);return res.end()}fs.readFile(p,(e,d)=>{if(e){res.writeHead(404);return res.end('Not found')}res.writeHead(200,{'Content-Type':{'.html':'text/html','.js':'text/javascript','.css':'text/css'}[path.extname(p)]||'application/octet-stream'});res.end(d)})});
@@ -62,34 +62,50 @@ function layoutFor(r){
  map.duration=Math.max(2500,Math.round(map.duration*(count===4?.7:.85)));
  return map;
 }
-function resetPuzzle(r){r.visited=[];r.solved=false;r.gate=false;r.key=false;r.progress=0;r.armed=true;r.until=0;r.leverStep=0;r.tokenStep=0;r.sequenceStep=0;r.lastLever=-1;r.lastToken=-1;r.lastPlate=-1;r.memoryStep=0;r.lastMemory=-1}
+function resetPuzzle(r){r.visited=[];r.solved=false;r.gate=false;r.key=false;r.progress=0;r.armed=true;r.until=0;r.leverStep=0;r.tokenStep=0;r.sequenceStep=0;r.lastLever=-1;r.lastToken=-1;r.lastPlate=-1;r.memoryStep=0;r.lastMemory=-1;r.leverHeld=[];r.tokenHeld=[];r.plateHeld=[];r.reverseStep=0;r.echoStep=0;r.sweepStep=0;r.lastLeverPlayer=null;r.handoffStep=0}
 function update(r){
- const map=layoutFor(r),ps=[...r.players.values()];
- const on=point=>ps.some(p=>Math.hypot(p.x-point[0]-.5,p.y-point[1]-.5)<.53);
- r.active=map.plates.map(on);if(!Array.isArray(r.visited)||r.visited.length!==map.plates.length)r.visited=map.plates.map(()=>false);
+ const map=layoutFor(r),ps=[...r.players.values()],req=map.requirements||[];
+ const occupants=point=>ps.filter(p=>Math.hypot(p.x-point[0]-.5,p.y-point[1]-.5)<.52).map(p=>p.id);
+ r.active=map.plates.map(point=>occupants(point).length>0);
+ if(!Array.isArray(r.visited)||r.visited.length!==map.plates.length)r.visited=map.plates.map(()=>false);
  if(r.solo)r.visited=map.plates.map((_,i)=>r.visited[i]||r.active[i]);
  if(r.started&&!r.solved){
-  const req=map.requirements||[];
-  const leverHit=map.levers.findIndex(on);
-  if(leverHit!==r.lastLever&&leverHit>=0){
-   if(r.leverStep<map.levers.length)r.leverStep=leverHit===map.order[r.leverStep]?r.leverStep+1:leverHit===map.order[0]?1:0;
+  const leverNow=map.levers.map(occupants),tokenNow=map.tokens.map(occupants),plateNow=map.plates.map(occupants);
+  const newHits=(now,old)=>now.flatMap((ids,i)=>ids.filter(id=>!(old[i]||[]).includes(id)).map(id=>({i,id})));
+  const leverHits=newHits(leverNow,r.leverHeld),tokenHits=newHits(tokenNow,r.tokenHeld),plateHits=newHits(plateNow,r.plateHeld);
+  for(const {i,id} of leverHits){
+   if(r.leverStep<map.levers.length){
+    const expected=map.order[r.leverStep];
+    if(i===expected){
+     r.leverStep++;
+     if(!req.includes('handoff')||r.solo||r.lastLeverPlayer===null||r.lastLeverPlayer!==id)r.handoffStep=r.leverStep;
+     r.lastLeverPlayer=id;
+    }else{r.leverStep=i===map.order[0]?1:0;r.handoffStep=0;r.lastLeverPlayer=id}
+   }else if(req.includes('reverse')&&r.reverseStep<map.levers.length){
+    const reversed=[...map.order].reverse();
+    r.reverseStep=i===reversed[r.reverseStep]?r.reverseStep+1:i===reversed[0]?1:0;
+   }
   }
-  r.lastLever=leverHit;
-  const tokenHit=map.tokens.findIndex(on);
-  if(tokenHit!==r.lastToken&&tokenHit>=0){
-   if(r.tokenStep<map.tokens.length)r.tokenStep=tokenHit===map.tokenOrder[r.tokenStep]?r.tokenStep+1:tokenHit===map.tokenOrder[0]?1:0;
+  for(const {i} of tokenHits){
+   if(r.tokenStep<map.tokens.length)r.tokenStep=i===map.tokenOrder[r.tokenStep]?r.tokenStep+1:i===map.tokenOrder[0]?1:0;
+   else if(req.includes('sweep')&&r.sweepStep<map.tokens.length){
+    const reversed=[...map.tokenOrder].reverse();
+    r.sweepStep=i===reversed[r.sweepStep]?r.sweepStep+1:i===reversed[0]?1:0;
+   }
   }
-  r.lastToken=tokenHit;
-  const plateHit=map.plates.findIndex(on);
-  if(plateHit!==r.lastPlate&&plateHit>=0&&req.includes('sequence'))r.sequenceStep=plateHit===r.sequenceStep?r.sequenceStep+1:plateHit===0?1:0;
-  r.lastPlate=plateHit;
-  if(req.includes('memory')&&leverHit!==r.lastMemory&&leverHit>=0)if(r.memoryStep<map.levers.length)r.memoryStep=leverHit===map.order[r.memoryStep]?r.memoryStep+1:leverHit===map.order[0]?1:0;
-  r.lastMemory=leverHit;
+  for(const {i} of plateHits){
+   if(req.includes('sequence')&&r.sequenceStep<map.plates.length)r.sequenceStep=i===r.sequenceStep?r.sequenceStep+1:i===0?1:0;
+   else if(req.includes('echo')&&r.echoStep<map.plates.length){
+    const expected=map.plates.length-1-r.echoStep;
+    r.echoStep=i===expected?r.echoStep+1:i===map.plates.length-1?1:0;
+   }
+  }
+  r.leverHeld=leverNow;r.tokenHeld=tokenNow;r.plateHeld=plateNow;
   if(req.includes('timer')&&r.leverStep===map.levers.length&&Date.now()>r.until)r.until=Date.now()+map.duration;
-  const ready=(!req.includes('levers')||r.leverStep>=map.levers.length)&&(!req.includes('tokens')||r.tokenStep>=map.tokens.length)&&(!req.includes('sequence')||r.sequenceStep>=map.plates.length)&&(!req.includes('memory')||r.memoryStep>=map.levers.length)&&(!req.includes('timer')||Date.now()<r.until);
+  const ready=(!req.includes('levers')||r.leverStep>=map.levers.length)&&(!req.includes('tokens')||r.tokenStep>=map.tokens.length)&&(!req.includes('sequence')||r.sequenceStep>=map.plates.length)&&(!req.includes('reverse')||r.reverseStep>=map.levers.length)&&(!req.includes('handoff')||r.handoffStep>=map.levers.length)&&(!req.includes('echo')||r.echoStep>=map.plates.length)&&(!req.includes('sweep')||r.sweepStep>=map.tokens.length)&&(!req.includes('timer')||Date.now()<r.until);
   if((ps.length>=2&&r.active.every(Boolean)||r.solo&&r.visited.every(Boolean))&&ready)r.solved=true;
  }
- broadcast(r,{type:'state',code:r.code,started:r.started,level:r.level,layout:map,players:ps.map(({id,name,x,y,avatar})=>({id,name,x,y,avatar})),host:r.host,active:r.active,solved:r.solved,gate:r.leverStep>=map.levers.length,key:r.tokenStep>=map.tokens.length,progress:r.sequenceStep||0,leverStep:r.leverStep||0,tokenStep:r.tokenStep||0,memoryStep:r.memoryStep||0,remaining:Math.max(0,(r.until||0)-Date.now()),solo:!!r.solo,visited:r.visited||[false,false],canSkip:ps.some(p=>p.id===r.host&&p.name.toLowerCase()==='quay')});
+ broadcast(r,{type:'state',code:r.code,started:r.started,level:r.level,layout:map,players:ps.map(({id,name,x,y,avatar})=>({id,name,x,y,avatar})),host:r.host,active:r.active,solved:r.solved,gate:r.leverStep>=map.levers.length,key:r.tokenStep>=map.tokens.length,progress:r.sequenceStep||0,leverStep:r.leverStep||0,tokenStep:r.tokenStep||0,reverseStep:r.reverseStep||0,echoStep:r.echoStep||0,sweepStep:r.sweepStep||0,handoffStep:r.handoffStep||0,remaining:Math.max(0,(r.until||0)-Date.now()),solo:!!r.solo,visited:r.visited||[],canSkip:ps.some(p=>p.id===r.host&&p.name.toLowerCase()==='quay')});
 }
 function valid(r,x,y){return Number.isFinite(x)&&Number.isFinite(y)&&x>=1.16&&x<=layoutFor(r).maxX+1-.16&&y>=1.16&&y<=layoutFor(r).maxY+1-.16&&(!r.started||!layoutFor(r).walls.some(([a,b])=>Math.pow(x-Math.max(a,Math.min(x,a+1)),2)+Math.pow(y-Math.max(b,Math.min(y,b+1)),2)<.16*.16))}
 function spawn(r){[...r.players.values()].forEach((p,i)=>{p.x=2.5+i*.55;p.y=4.5})}
