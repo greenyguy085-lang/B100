@@ -14,6 +14,27 @@
 {name:'CROSS CURRENT',hint:'Work your way around the barriers to the far switches.',plates:[[3,2],[11,6]],walls:[[4,2],[4,3],[4,4],[4,5],[6,1],[6,2],[6,3],[6,4],[8,3],[8,4],[8,5],[8,6],[10,1],[10,2],[10,3],[10,4],[12,4],[12,5]]},
 {name:'THE FINAL PAIR',hint:'Take the near plate. Your partner must reach the other side.',plates:[[3,6],[12,2]],walls:[[3,2],[3,3],[3,4],[5,1],[5,2],[5,3],[5,4],[7,3],[7,4],[7,5],[7,6],[9,1],[9,2],[9,3],[9,4],[11,3],[11,4],[11,5],[11,6]]}
 ];
+// Offline helper bot: plays alongside you in the HTML preview.
+class PreviewSocket {
+ constructor(){this.readyState=0;this.started=false;this.level=1;this.code='DEMO1';this.name='PLAYER';this.avatar=null;this.x=2.5;this.y=4.5;this.bx=3.1;this.by=4.5;this.solved=false;this.timer=setInterval(()=>this.tick(),80);setTimeout(()=>{this.readyState=1;this.onopen?.()},20)}
+ map(){return [
+ {name:'THE LONG WAY',hint:'You take plate 01. The helper bot takes plate 02.',plates:[[4,2],[11,6]],walls:[[6,1],[6,2],[6,3],[6,4],[6,5],[9,3],[9,4],[9,5],[9,6],[11,3],[12,3]]},
+ {name:'THE DIVIDE',hint:'Hold plate 01 while the bot searches for plate 02.',plates:[[3,6],[11,2]],walls:[[5,1],[5,2],[5,3],[5,4],[7,3],[7,4],[7,5],[7,6],[9,1],[9,2],[9,3],[9,4],[11,5],[12,5]]},
+ {name:'CIRCUIT',hint:'Follow the winding route to plate 01.',plates:[[4,2],[11,6]],walls:[[3,3],[4,3],[5,3],[6,3],[7,3],[8,3],[9,3],[10,3],[10,4],[10,5],[7,5],[8,5],[9,5],[4,5],[5,5],[6,5]]},
+ {name:'CROSS CURRENT',hint:'Keep plate 01 active so the bot can finish.',plates:[[3,2],[11,6]],walls:[[4,2],[4,3],[4,4],[4,5],[6,1],[6,2],[6,3],[6,4],[8,3],[8,4],[8,5],[8,6],[10,1],[10,2],[10,3],[10,4],[12,4],[12,5]]},
+ {name:'THE FINAL PAIR',hint:'Find plate 01. Your bot will reach plate 02.',plates:[[3,6],[12,2]],walls:[[3,2],[3,3],[3,4],[5,1],[5,2],[5,3],[5,4],[7,3],[7,4],[7,5],[7,6],[9,1],[9,2],[9,3],[9,4],[11,3],[11,4],[11,5],[11,6]]}
+ ][(this.level-1)%5]}
+ emit(data){setTimeout(()=>this.onmessage?.({data:JSON.stringify(data)}),0)}
+ send(raw){const m=JSON.parse(raw);if(m.type==='create'||m.type==='join'){this.name=m.name||'PLAYER';this.avatar=m.avatar;this.code=m.code||'DEMO1';this.emit({type:'welcome',id:1});this.state()}else if(m.type==='avatar'){this.avatar=m.avatar;this.state()}else if(m.type==='start'){this.started=true;this.state()}else if(m.type==='next'&&this.solved){this.level=Math.min(100,this.level+1);this.reset();this.state()}else if(m.type==='reset'){this.reset();this.state()}else if(m.type==='move'){this.x=m.x;this.y=m.y;this.state()}}
+ reset(){this.solved=false;this.x=2.5;this.y=4.5;this.bx=3.1;this.by=4.5}
+ waypoint(){const map=this.map(),goal=map.plates[1],walls=new Set(map.walls.map(p=>p.join(','))),start=[Math.floor(this.bx),Math.floor(this.by)],q=[start],seen=new Set([start.join(',')]),prev=new Map();let found=false;
+ for(let i=0;i<q.length;i++){const [x,y]=q[i];if(x===goal[0]&&y===goal[1]){found=true;break}for(const [dx,dy] of [[1,0],[0,1],[-1,0],[0,-1]]){const nx=x+dx,ny=y+dy,k=nx+','+ny;if(nx<1||nx>12||ny<1||ny>6||walls.has(k)||seen.has(k))continue;seen.add(k);prev.set(k,[x,y]);q.push([nx,ny])}}
+ if(!found)return [this.bx,this.by];let n=goal,k=n.join(',');while(prev.has(k)){const parent=prev.get(k);if(parent[0]===start[0]&&parent[1]===start[1])break;n=parent;k=n.join(',')}return [n[0]+.5,n[1]+.5]}
+ tick(){if(!this.started||this.readyState!==1||this.solved)return;const [tx,ty]=this.waypoint(),dx=tx-this.bx,dy=ty-this.by,d=Math.hypot(dx,dy);if(d>.03){const step=Math.min(.12,d);this.bx+=dx/d*step;this.by+=dy/d*step}this.state()}
+ state(){const m=this.map(),players=[{id:1,name:this.name,x:this.x,y:this.y,avatar:this.avatar},{id:2,name:'HELPER BOT',x:this.bx,y:this.by,avatar:null}],active=m.plates.map(([x,y])=>players.some(p=>Math.hypot(p.x-x-.5,p.y-y-.5)<.58));if(this.started&&active.every(Boolean))this.solved=true;this.emit({type:'state',code:this.code,started:this.started,level:this.level,layout:m,players,host:1,active,solved:this.solved})}
+ close(){clearInterval(this.timer);this.readyState=3;this.onclose?.()}
+}
+window.WebSocket=PreviewSocket;
 const $=id=>document.getElementById(id),canvas=$('board'),ctx=canvas.getContext('2d'),paint=$('paint'),pc=paint.getContext('2d'),T=72,OX=56,OY=32,colors=['#000000','#555657','#999b99','#e7e5df'],keys=new Set(),cache=new Map();let ws,id,room,px=null,py=null,lastSend=0,last=performance.now(),ink=3,drag=false;
 function defaultSprite(){const a=Array(1024).fill('0');function rect(x,y,w,h,c){for(let j=y;j<y+h;j++)for(let i=x;i<x+w;i++)if(i>=0&&i<32&&j>=0&&j<32)a[j*32+i]=String(c)}rect(10,3,12,10,4);rect(12,5,8,5,3);rect(10,13,12,12,2);rect(7,14,3,10,4);rect(22,14,3,10,4);rect(11,25,4,6,4);rect(18,25,4,6,4);rect(13,8,2,2,1);rect(18,8,2,2,1);return a.join('')}
 let avatar;try{avatar=localStorage.getItem('b100-avatar')}catch{}if(!/^[0-4]{1024}$/.test(avatar||''))avatar=defaultSprite();
