@@ -48,11 +48,25 @@ const wss=new WebSocket.Server({server}),rooms=new Map();let seq=0;
 const send=(ws,v)=>{if(ws.readyState===1)ws.send(JSON.stringify(v))};
 const broadcast=(r,v)=>r.players.forEach(p=>send(p.ws,v));
 const safeAvatar=v=>typeof v==='string'&&/^[0-4]{1024}$/.test(v)?v:null;
-function resetPuzzle(r){r.visited=[false,false];r.solved=false;r.gate=false;r.key=false;r.progress=0;r.armed=true;r.until=0;r.leverStep=0;r.tokenStep=0;r.sequenceStep=0;r.lastLever=-1;r.lastToken=-1;r.lastPlate=-1;r.memoryStep=0;r.lastMemory=-1}
+function layoutFor(r){
+ const base=maps[Math.min(49,r.level-1)],count=r.solo?1:r.players.size;
+ if(count<3)return base;
+ const map={...base,plates:base.plates.map(p=>[...p]),levers:base.levers.map(p=>[...p]),tokens:base.tokens.map(p=>[...p]),order:[...base.order],tokenOrder:[...base.tokenOrder],requirements:[...base.requirements]};
+ const occupied=new Set([...map.walls,...map.plates,...map.levers,...map.tokens].map(p=>p.join(',')));
+ const candidates=[];
+ for(let y=1;y<=map.maxY;y++)for(let x=2;x<=map.maxX;x++)if(!occupied.has(x+','+y)&&Math.hypot(x-2,y-4)>3)candidates.push([x,y]);
+ const choose=(existing,minDist)=>{let best=null,score=-Infinity;for(const p of candidates){if(occupied.has(p.join(',')))continue;const d=Math.min(...existing.map(q=>Math.hypot(p[0]-q[0],p[1]-q[1])));if(d>score){score=d;best=p}}if(best&&score>=minDist){occupied.add(best.join(','));return best}return null};
+ while(map.plates.length<count){const p=choose(map.plates,2);if(!p)break;map.plates.push(p)}
+ if(map.requirements.includes('levers')){for(let n=0;n<count-2;n++){const p=choose([...map.plates,...map.levers],2);if(p){map.levers.push(p);map.order.push(map.levers.length-1)}}}
+ if(map.requirements.includes('tokens')){for(let n=0;n<count-2;n++){const p=choose([...map.plates,...map.levers,...map.tokens],2);if(p){map.tokens.push(p);map.tokenOrder.push(map.tokens.length-1)}}}
+ map.duration=Math.max(2500,Math.round(map.duration*(count===4?.7:.85)));
+ return map;
+}
+function resetPuzzle(r){r.visited=[];r.solved=false;r.gate=false;r.key=false;r.progress=0;r.armed=true;r.until=0;r.leverStep=0;r.tokenStep=0;r.sequenceStep=0;r.lastLever=-1;r.lastToken=-1;r.lastPlate=-1;r.memoryStep=0;r.lastMemory=-1}
 function update(r){
- const map=maps[Math.min(49,r.level-1)],ps=[...r.players.values()];
+ const map=layoutFor(r),ps=[...r.players.values()];
  const on=point=>ps.some(p=>Math.hypot(p.x-point[0]-.5,p.y-point[1]-.5)<.53);
- r.active=map.plates.map(on);
+ r.active=map.plates.map(on);if(!Array.isArray(r.visited)||r.visited.length!==map.plates.length)r.visited=map.plates.map(()=>false);
  if(r.solo)r.visited=map.plates.map((_,i)=>r.visited[i]||r.active[i]);
  if(r.started&&!r.solved){
   const req=map.requirements||[];
@@ -72,12 +86,12 @@ function update(r){
   if(req.includes('memory')&&leverHit!==r.lastMemory&&leverHit>=0)if(r.memoryStep<map.levers.length)r.memoryStep=leverHit===map.order[r.memoryStep]?r.memoryStep+1:leverHit===map.order[0]?1:0;
   r.lastMemory=leverHit;
   if(req.includes('timer')&&r.leverStep===map.levers.length&&Date.now()>r.until)r.until=Date.now()+map.duration;
-  const ready=(!req.includes('levers')||r.leverStep>=map.levers.length)&&(!req.includes('tokens')||r.tokenStep>=map.tokens.length)&&(!req.includes('sequence')||r.sequenceStep>=2)&&(!req.includes('memory')||r.memoryStep>=map.levers.length)&&(!req.includes('timer')||Date.now()<r.until);
+  const ready=(!req.includes('levers')||r.leverStep>=map.levers.length)&&(!req.includes('tokens')||r.tokenStep>=map.tokens.length)&&(!req.includes('sequence')||r.sequenceStep>=map.plates.length)&&(!req.includes('memory')||r.memoryStep>=map.levers.length)&&(!req.includes('timer')||Date.now()<r.until);
   if((ps.length>=2&&r.active.every(Boolean)||r.solo&&r.visited.every(Boolean))&&ready)r.solved=true;
  }
  broadcast(r,{type:'state',code:r.code,started:r.started,level:r.level,layout:map,players:ps.map(({id,name,x,y,avatar})=>({id,name,x,y,avatar})),host:r.host,active:r.active,solved:r.solved,gate:r.leverStep>=map.levers.length,key:r.tokenStep>=map.tokens.length,progress:r.sequenceStep||0,leverStep:r.leverStep||0,tokenStep:r.tokenStep||0,memoryStep:r.memoryStep||0,remaining:Math.max(0,(r.until||0)-Date.now()),solo:!!r.solo,visited:r.visited||[false,false],canSkip:ps.some(p=>p.id===r.host&&p.name.toLowerCase()==='quay')});
 }
-function valid(r,x,y){return Number.isFinite(x)&&Number.isFinite(y)&&x>=1.16&&x<=maps[Math.min(24,r.level-1)].maxX+1-.16&&y>=1.16&&y<=maps[Math.min(24,r.level-1)].maxY+1-.16&&(!r.started||!maps[Math.min(24,r.level-1)].walls.some(([a,b])=>Math.pow(x-Math.max(a,Math.min(x,a+1)),2)+Math.pow(y-Math.max(b,Math.min(y,b+1)),2)<.16*.16))}
+function valid(r,x,y){return Number.isFinite(x)&&Number.isFinite(y)&&x>=1.16&&x<=layoutFor(r).maxX+1-.16&&y>=1.16&&y<=layoutFor(r).maxY+1-.16&&(!r.started||!layoutFor(r).walls.some(([a,b])=>Math.pow(x-Math.max(a,Math.min(x,a+1)),2)+Math.pow(y-Math.max(b,Math.min(y,b+1)),2)<.16*.16))}
 function spawn(r){[...r.players.values()].forEach((p,i)=>{p.x=2.5+i*.55;p.y=4.5})}
 wss.on('connection',ws=>{let room=null,id=null;ws.on('message',raw=>{if(raw.length>12000)return;let m;try{m=JSON.parse(raw)}catch{return}if(!m||typeof m!=='object')return;
 if(m.type==='create'||m.type==='join'){if(room)return;let r=m.type==='join'?rooms.get(String(m.code||'').trim().toUpperCase()):null;if(m.type==='join'&&!r)return send(ws,{type:'error',message:'Room not found'});if(r&&r.players.size>=4)return send(ws,{type:'error',message:'Room is full'});if(r&&r.started)return send(ws,{type:'error',message:'Game already started'});if(!r){let code;do{code=Math.random().toString(36).slice(2,7).toUpperCase()}while(rooms.has(code));r={code,players:new Map(),started:false,level:1,solved:false,host:null,active:[false,false],gate:false,key:false,progress:0,armed:true,until:0,solo:false,visited:[false,false]};rooms.set(code,r)}id=++seq;room=r;const name=String(m.name||'PLAYER').replace(/[^a-zA-Z0-9 _-]/g,'').trim().slice(0,16)||'PLAYER';r.players.set(id,{id,name,x:2.5+r.players.size*.55,y:4.5,avatar:safeAvatar(m.avatar),ws});if(!r.host)r.host=id;send(ws,{type:'welcome',id});update(r);return}
