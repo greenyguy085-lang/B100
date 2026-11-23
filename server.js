@@ -10,7 +10,7 @@ const baseMaps=[
 const names=['THE LONG WAY','THE DIVIDE','CIRCUIT','CROSS CURRENT','THE FINAL PAIR','SECOND LOCK','FALSE ROUTE','THE SPLIT','AFTER THE SIGNAL','HOLD THE LINE','DEAD END','THE CROSSING','FIRST SECOND THIRD','THE WRONG ORDER','FOUR CORNERS','MEMORY TEST','MISSING PIECE','LOCKED AWAY','THE SEARCH','THE EXCHANGE','DEEPER STILL','NARROW MARGIN','CHAIN REACTION','THE LAST TURN','THE TWENTY-FIFTH'];
 const blindLevel=i=>(i+1)%10===0;
 const maps=Array.from({length:50},(_,i)=>{
- const mechanic=['plates','gate','timer','sequence','keys','hybrid','memory','dual','reverse','gauntlet','master'][Math.min(10,Math.floor(i/4))];
+ const mechanic=['plates','gate','timer','sequence','keys','hybrid','reverse','reverse','handoff','echo','echo','sweep','sweep'][Math.min(12,Math.floor(i/4))];
  const requirements=i<4?[]:i<8?['levers']:i<12?['levers','timer']:i<16?['levers','sequence']:i<20?['levers','sequence','tokens']:i<24?['levers','sequence','tokens']:i<28?['levers','sequence','tokens','reverse']:i<32?['levers','sequence','tokens','reverse']:i<36?['levers','sequence','tokens','reverse','handoff']:i<42?['levers','sequence','tokens','reverse','handoff','echo']:['levers','sequence','tokens','reverse','handoff','echo','sweep'];
  if(blindLevel(i)){const t=requirements.indexOf('timer');if(t>=0)requirements.splice(t,1)}
  const special=i===29;
@@ -41,7 +41,7 @@ const maps=Array.from({length:50},(_,i)=>{
  const lever=levers[0]||choose(),token=tokens[0]||choose();
  const order=levers.map((_,k)=>k);for(let k=order.length-1;k>0;k--){const n=Math.floor(rand()*(k+1));[order[k],order[n]]=[order[n],order[k]]}
  const tokenOrder=tokens.map((_,k)=>k);for(let k=tokenOrder.length-1;k>0;k--){const n=Math.floor(rand()*(k+1));[tokenOrder[k],tokenOrder[n]]=[tokenOrder[n],tokenOrder[k]]}
- return {name:names[i]||'CHAMBER '+String(i+1).padStart(2,'0'),hint:i>=42?'Complete forward and reverse token routes, lever handoffs, and the plate echo.':i>=36?'Complete the plate echo backwards after the normal sequence.':i>=32?'Alternate players on consecutive levers; then reverse the lever sequence.':i>=24?'Complete the levers in order, then repeat them in reverse order.':i>=16?'Complete the numbered token sequence and previous objectives.':i>=12?'Activate the plates in numerical order, then hold them together.':i>=8?'Complete the lever sequence before the timer expires.':i>=4?'Activate the numbered levers in order.':'Hold the pressure plates together.',plates:[plateA,plateB],walls:[...walls].map(k=>k.split(',').map(Number)),mechanic,requirements,levers,tokens,order,tokenOrder,lever,token,blind,maxX,maxY,duration:Math.max(3000,9000-(i-8)*220),difficulty:Number(Math.pow(1.5,i/4).toFixed(2))};
+ return {name:names[i]||'CHAMBER '+String(i+1).padStart(2,'0'),hint:i>=42?'TOKEN SWEEP: finish tokens in numbered order, then repeat them backwards. Complete the lever reversal, alternating-player handoff, and plate echo too.':i>=36?'PLATE ECHO: activate the plates 1 to '+(2)+' in order, then activate them in reverse order. Finish all previous objectives.':i>=32?'HANDOFF: different players must take turns activating successive levers. Finish the forward and reverse lever sequences.':i>=24?'REVERSE LEVERS: complete the numbered levers, then activate them again in reverse order.':i>=16?'TOKEN CIRCUIT: collect the numbered tokens in order, then complete the previous objectives.':i>=12?'PLATE SEQUENCE: activate the plates in order before everyone holds their assigned plate.':i>=8&&!blind?'TIMED RELAY: complete the levers before the timer expires.':i>=4?'Activate the numbered levers in order.':'Hold every pressure plate simultaneously.',plates:[plateA,plateB],walls:[...walls].map(k=>k.split(',').map(Number)),mechanic,requirements,levers,tokens,order,tokenOrder,lever,token,blind,maxX,maxY,duration:Math.max(3000,9000-(i-8)*220),difficulty:Number(Math.pow(1.5,i/4).toFixed(2))};
 });
 const server=http.createServer((req,res)=>{let u;try{u=decodeURIComponent(new URL(req.url,'http://localhost').pathname)}catch{res.writeHead(400);return res.end()}const p=path.resolve(root,'.'+(u==='/'?'/index.html':u));if(!p.startsWith(root+path.sep)){res.writeHead(403);return res.end()}fs.readFile(p,(e,d)=>{if(e){res.writeHead(404);return res.end('Not found')}res.writeHead(200,{'Content-Type':{'.html':'text/html','.js':'text/javascript','.css':'text/css'}[path.extname(p)]||'application/octet-stream'});res.end(d)})});
 const wss=new WebSocket.Server({server}),rooms=new Map();let seq=0;
@@ -52,14 +52,22 @@ function layoutFor(r){
  const base=maps[Math.min(49,r.level-1)],count=r.solo?1:r.players.size;
  if(count<3)return base;
  const map={...base,plates:base.plates.map(p=>[...p]),levers:base.levers.map(p=>[...p]),tokens:base.tokens.map(p=>[...p]),order:[...base.order],tokenOrder:[...base.tokenOrder],requirements:[...base.requirements]};
- const occupied=new Set([...map.walls,...map.plates,...map.levers,...map.tokens].map(p=>p.join(',')));
- const candidates=[];
- for(let y=1;y<=map.maxY;y++)for(let x=2;x<=map.maxX;x++)if(!occupied.has(x+','+y)&&Math.hypot(x-2,y-4)>3)candidates.push([x,y]);
- const choose=(existing,minDist)=>{let best=null,score=-Infinity;for(const p of candidates){if(occupied.has(p.join(',')))continue;const d=Math.min(...existing.map(q=>Math.hypot(p[0]-q[0],p[1]-q[1])));if(d>score){score=d;best=p}}if(best&&score>=minDist){occupied.add(best.join(','));return best}return null};
- while(map.plates.length<count){const p=choose(map.plates,2);if(!p)break;map.plates.push(p)}
- if(map.requirements.includes('levers')){for(let n=0;n<count-2;n++){const p=choose([...map.plates,...map.levers],2);if(p){map.levers.push(p);map.order.push(map.levers.length-1)}}}
- if(map.requirements.includes('tokens')){for(let n=0;n<count-2;n++){const p=choose([...map.plates,...map.levers,...map.tokens],2);if(p){map.tokens.push(p);map.tokenOrder.push(map.tokens.length-1)}}}
- map.duration=Math.max(2500,Math.round(map.duration*(count===4?.7:.85)));
+ const walls=new Set(map.walls.map(p=>p.join(',')));
+ const reachable=new Set(['2,4']),q=[[2,4]];
+ for(let n=0;n<q.length;n++){const [x,y]=q[n];for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const a=x+dx,b=y+dy,k=a+','+b;if(a<2||a>map.maxX||b<1||b>map.maxY||walls.has(k)||reachable.has(k))continue;reachable.add(k);q.push([a,b])}}
+ const occupied=new Set([...map.plates,...map.levers,...map.tokens].map(p=>p.join(',')));
+ const candidates=[...reachable].map(k=>k.split(',').map(Number)).filter(([x,y])=>Math.hypot(x-2,y-4)>3);
+ const choose=(existing,minDist)=>{
+  let best=null,score=-1;
+  for(const p of candidates){if(occupied.has(p.join(',')))continue;const d=Math.min(...existing.map(q=>Math.hypot(p[0]-q[0],p[1]-q[1])));if(d>score){score=d;best=p}}
+  if(!best||score<minDist)return null;
+  occupied.add(best.join(','));return best
+ };
+ while(map.plates.length<count){const p=choose(map.plates,1.5);if(!p)break;map.plates.push(p)}
+ if(map.requirements.includes('levers'))for(let n=0;n<count-2;n++){const p=choose([...map.plates,...map.levers],1.5);if(p){map.levers.push(p);map.order.push(map.levers.length-1)}}
+ if(map.requirements.includes('tokens'))for(let n=0;n<count-2;n++){const p=choose([...map.plates,...map.levers,...map.tokens],1.5);if(p){map.tokens.push(p);map.tokenOrder.push(map.tokens.length-1)}}
+ // Time is adjusted to the longer routes instead of becoming impossible with more players.
+ map.duration=Math.round(map.duration*(count===4?1.5:1.25));
  return map;
 }
 function resetPuzzle(r){r.visited=[];r.solved=false;r.gate=false;r.key=false;r.progress=0;r.armed=true;r.until=0;r.leverStep=0;r.tokenStep=0;r.sequenceStep=0;r.lastLever=-1;r.lastToken=-1;r.lastPlate=-1;r.memoryStep=0;r.lastMemory=-1;r.leverHeld=[];r.tokenHeld=[];r.plateHeld=[];r.reverseStep=0;r.echoStep=0;r.sweepStep=0;r.lastLeverPlayer=null;r.handoffStep=0}
@@ -77,10 +85,9 @@ function update(r){
    if(r.leverStep<map.levers.length){
     const expected=map.order[r.leverStep];
     if(i===expected){
-     r.leverStep++;
-     if(!req.includes('handoff')||r.solo||r.lastLeverPlayer===null||r.lastLeverPlayer!==id)r.handoffStep=r.leverStep;
-     r.lastLeverPlayer=id;
-    }else{r.leverStep=i===map.order[0]?1:0;r.handoffStep=0;r.lastLeverPlayer=id}
+     if(req.includes('handoff')&&!r.solo&&r.lastLeverPlayer!==null&&r.lastLeverPlayer===id){r.leverStep=0;r.handoffStep=0;r.lastLeverPlayer=null}
+     else{r.leverStep++;r.handoffStep=r.leverStep;r.lastLeverPlayer=id}
+    }else{r.leverStep=i===map.order[0]?1:0;r.handoffStep=r.leverStep;r.lastLeverPlayer=id}
    }else if(req.includes('reverse')&&r.reverseStep<map.levers.length){
     const reversed=[...map.order].reverse();
     r.reverseStep=i===reversed[r.reverseStep]?r.reverseStep+1:i===reversed[0]?1:0;
