@@ -1,11 +1,11 @@
 const http=require('http'),fs=require('fs'),path=require('path'),WebSocket=require('ws');
 const PORT=process.env.PORT||3000,root=path.join(__dirname,'public');
 const maps=[
-{name:'THE LONG WAY',hint:'Find the plates at opposite ends of the room.',plates:[[4,2],[11,6]],walls:[[6,1],[6,2],[6,3],[6,4],[6,5],[9,3],[9,4],[9,5],[9,6],[11,3],[12,3]]},
-{name:'THE DIVIDE',hint:'Two routes. One door. Stay on your switch.',plates:[[3,6],[11,2]],walls:[[5,1],[5,2],[5,3],[5,4],[7,3],[7,4],[7,5],[7,6],[9,1],[9,2],[9,3],[9,4],[11,5],[12,5]]},
-{name:'CIRCUIT',hint:'Follow the winding corridors and hold your position.',plates:[[4,2],[11,6]],walls:[[3,3],[4,3],[5,3],[6,3],[7,3],[8,3],[9,3],[10,3],[10,4],[10,5],[7,5],[8,5],[9,5],[4,5],[5,5],[6,5]]},
-{name:'CROSS CURRENT',hint:'Work your way around the barriers to the far switches.',plates:[[3,2],[11,6]],walls:[[4,2],[4,3],[4,4],[4,5],[6,1],[6,2],[6,3],[6,4],[8,3],[8,4],[8,5],[8,6],[10,1],[10,2],[10,3],[10,4],[12,4],[12,5]]},
-{name:'THE FINAL PAIR',hint:'Take the near plate. Your partner must reach the other side.',plates:[[3,6],[12,2]],walls:[[3,2],[3,3],[3,4],[5,1],[5,2],[5,3],[5,4],[7,3],[7,4],[7,5],[7,6],[9,1],[9,2],[9,3],[9,4],[11,3],[11,4],[11,5],[11,6]]}
+{name:'THE LONG WAY',hint:'Two switches. Find a route to each.',plates:[[5,2],[12,6]],walls:[[6,1],[6,2],[6,3],[6,4],[6,5],[9,3],[9,4],[9,5],[9,6],[11,3],[12,3]]},
+{name:'THE DIVIDE',hint:'The shortest route is blocked.',plates:[[4,6],[12,2]],walls:[[5,1],[5,2],[5,3],[5,4],[7,3],[7,4],[7,5],[7,6],[9,1],[9,2],[9,3],[9,4],[11,5],[12,5]]},
+{name:'CIRCUIT',hint:'Look for a path through the interior.',plates:[[4,2],[11,6]],walls:[[3,3],[4,3],[5,3],[6,3],[7,3],[8,3],[9,3],[10,3],[10,4],[10,5],[7,5],[8,5],[9,5],[4,5],[5,5],[6,5]]},
+{name:'CROSS CURRENT',hint:'The walls split the room into narrow passages.',plates:[[5,2],[11,6]],walls:[[4,2],[4,3],[4,4],[4,5],[6,1],[6,2],[6,3],[6,4],[8,3],[8,4],[8,5],[8,6],[10,1],[10,2],[10,3],[10,4],[12,4],[12,5]]},
+{name:'THE FINAL PAIR',hint:'Both switches must be held at once.',plates:[[4,6],[12,2]],walls:[[3,2],[3,3],[3,4],[5,1],[5,2],[5,3],[5,4],[7,3],[7,4],[7,5],[7,6],[9,1],[9,2],[9,3],[9,4],[11,3],[11,4],[11,5],[11,6]]}
 ];
 const server=http.createServer((req,res)=>{let u;try{u=decodeURIComponent(new URL(req.url,'http://localhost').pathname)}catch{res.writeHead(400);return res.end()}const p=path.resolve(root,'.'+(u==='/'?'/index.html':u));if(!p.startsWith(root+path.sep)){res.writeHead(403);return res.end()}fs.readFile(p,(e,d)=>{if(e){res.writeHead(404);return res.end('Not found')}res.writeHead(200,{'Content-Type':{'.html':'text/html','.js':'text/javascript','.css':'text/css'}[path.extname(p)]||'application/octet-stream'});res.end(d)})});
 const wss=new WebSocket.Server({server}),rooms=new Map();let seq=0;
