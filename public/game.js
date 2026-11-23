@@ -1,29 +1,57 @@
 const $=id=>document.getElementById(id),canvas=$('board'),ctx=canvas.getContext('2d'),paint=$('paint'),pc=paint.getContext('2d'),T=72,OX=56,OY=32,colors=['#000000','#555657','#999b99','#e7e5df'],keys=new Set(),cache=new Map();let ws,id,room,px=null,py=null,lastSend=0,last=performance.now(),ink='#999b99',tool='brush',drag=false,deviceMode=null,joyX=0,joyY=0,joyPointer=null;
+const joy=$('mobileJoystick'),knob=$('joystickKnob');
+function resetJoystick(){
+ joyX=0;joyY=0;joyPointer=null;
+ knob.style.transform='translate3d(0,0,0)';
+}
 function chooseDevice(mode){
- deviceMode=mode;
+ resetJoystick();deviceMode=mode;
  $('deviceChoice').hidden=true;
  $('landing').hidden=!!room;
  if(room)$('game').hidden=false;
- $('mobileJoystick').hidden=mode!=='mobile';
- $('controlInstructions').textContent=mode==='mobile'?'Drag the left joystick to move. Release to stop.':'WASD / ARROW KEYS — Move';
- joyX=joyY=0;joyPointer=null;
+ joy.hidden=mode!=='mobile';
+ $('controlInstructions').textContent=mode==='mobile'?'Hold and drag the joystick to walk. Release to stop.':'WASD / ARROW KEYS — Move';
 }
 $('chooseComputer').onclick=()=>chooseDevice('computer');
 $('chooseMobile').onclick=()=>chooseDevice('mobile');
-$('switchDevice').onclick=()=>{joyX=joyY=0;joyPointer=null;$('deviceChoice').hidden=false;$('landing').hidden=true;$('game').hidden=true};
-const joy=$('mobileJoystick'),knob=$('joystickKnob');
-function moveJoystick(e){
- const rect=joy.getBoundingClientRect(),cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;
- const dx=e.clientX-cx,dy=e.clientY-cy,dist=Math.hypot(dx,dy),radius=rect.width*.32;
- const scale=dist>radius?radius/dist:1;
- joyX=dx*scale/radius;joyY=dy*scale/radius;
- if(Math.hypot(joyX,joyY)<.12)joyX=joyY=0;
- knob.style.transform='translate('+joyX*radius+'px,'+joyY*radius+'px)';
+$('switchDevice').onclick=()=>{
+ resetJoystick();$('deviceChoice').hidden=false;$('landing').hidden=true;$('game').hidden=true
+};
+function updateJoystick(clientX,clientY){
+ const rect=joy.getBoundingClientRect();
+ const cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;
+ const dx=clientX-cx,dy=clientY-cy;
+ const radius=Math.max(20,Math.min(rect.width,rect.height)*.33);
+ const length=Math.hypot(dx,dy);
+ const factor=length>radius?radius/length:1;
+ joyX=dx*factor/radius;joyY=dy*factor/radius;
+ if(Math.hypot(joyX,joyY)<.10){joyX=0;joyY=0}
+ knob.style.transform='translate3d('+(joyX*radius)+'px,'+(joyY*radius)+'px,0)';
 }
-joy.addEventListener('pointerdown',e=>{if(deviceMode!=='mobile'||joyPointer!==null)return;joyPointer=e.pointerId;joy.setPointerCapture(e.pointerId);moveJoystick(e);e.preventDefault()});
-joy.addEventListener('pointermove',e=>{if(e.pointerId===joyPointer){moveJoystick(e);e.preventDefault()}});
-function releaseJoystick(e){if(e.pointerId!==joyPointer)return;joyPointer=null;joyX=joyY=0;knob.style.transform='translate(0,0)'}
-joy.addEventListener('pointerup',releaseJoystick);joy.addEventListener('pointercancel',releaseJoystick);addEventListener('blur',()=>{joyX=joyY=0;joyPointer=null;knob.style.transform='translate(0,0)'});
+joy.addEventListener('pointerdown',e=>{
+ if(deviceMode!=='mobile'||joyPointer!==null||!e.isPrimary)return;
+ joyPointer=e.pointerId;
+ try{joy.setPointerCapture(e.pointerId)}catch{}
+ updateJoystick(e.clientX,e.clientY);e.preventDefault();
+},{passive:false});
+function joystickMove(e){
+ if(joyPointer!==e.pointerId)return;
+ updateJoystick(e.clientX,e.clientY);e.preventDefault();
+}
+function joystickEnd(e){
+ if(joyPointer!==e.pointerId)return;
+ resetJoystick();e.preventDefault();
+}
+joy.addEventListener('pointermove',joystickMove,{passive:false});
+joy.addEventListener('pointerup',joystickEnd,{passive:false});
+joy.addEventListener('pointercancel',joystickEnd,{passive:false});
+joy.addEventListener('lostpointercapture',e=>{if(e.pointerId===joyPointer)resetJoystick()});
+// Window listeners keep movement working when a finger leaves the joystick boundary.
+window.addEventListener('pointermove',joystickMove,{passive:false});
+window.addEventListener('pointerup',joystickEnd,{passive:false});
+window.addEventListener('pointercancel',joystickEnd,{passive:false});
+window.addEventListener('blur',resetJoystick);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)resetJoystick()});
 const legacyColors=['','#232425','#646666','#abadab','#f0eee7'];
 function defaultSprite(){return '0000000'.repeat(1024)}
 function normalizeAvatar(data){
