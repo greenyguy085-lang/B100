@@ -49,7 +49,7 @@ const server=http.createServer((req,res)=>{let u;try{u=decodeURIComponent(new UR
 const wss=new WebSocket.Server({server}),rooms=new Map();let seq=0;
 const send=(ws,v)=>{if(ws.readyState===1)ws.send(JSON.stringify(v))};
 const broadcast=(r,v)=>r.players.forEach(p=>send(p.ws,v));
-const safeAvatar=v=>typeof v==='string'&&/^[0-4]{1024}$/.test(v)?v:null;
+const safeAvatar=v=>typeof v==='string'&&(/^[0-4]{1024}$/.test(v)||/^(?:[01][0-9a-f]{6}){1024}$/i.test(v))?v:null;
 function layoutFor(r){
  const cacheKey=r.level+':'+r.players.size+':'+!!r.solo+':'+!!r.hardcore;
  if(r.layoutCacheKey===cacheKey&&r.layoutCache)return r.layoutCache;
