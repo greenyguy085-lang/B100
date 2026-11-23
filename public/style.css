@@ -73,3 +73,11 @@
  #mobileJoystick[hidden]{display:none!important}
  #game:has(#mobileJoystick:not([hidden])) aside{padding-bottom:150px}
 }
+
+#mobileControlSettings{margin-top:14px}#mobileControlType{width:100%;padding:13px;background:#252627;border:1px solid #646664;color:#eee;font:12px 'DM Mono',monospace}
+#mobileButtons{position:absolute;left:3%;bottom:5%;width:172px;height:172px;z-index:9;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);gap:4px;touch-action:none;user-select:none;-webkit-user-select:none}
+#mobileButtons[hidden]{display:none!important}
+#mobileButtons button{min-width:0;min-height:0;width:100%;height:100%;padding:0;border:2px solid #a8aaa7;background:#292b2bdc;color:#f4f4f1;font-size:22px;touch-action:none;user-select:none;-webkit-user-select:none}
+#mobileButtons button.pressed{background:#e5e3dd;color:#171819}
+#mobileButtons .moveUp{grid-area:1/2}#mobileButtons .moveLeft{grid-area:2/1}#mobileButtons .moveDown{grid-area:2/2}#mobileButtons .moveRight{grid-area:2/3}
+@media(max-width:700px){#mobileButtons:not([hidden]){position:fixed;left:max(12px,env(safe-area-inset-left));bottom:max(16px,env(safe-area-inset-bottom));width:156px;height:156px;z-index:9}#game:has(#mobileButtons:not([hidden])) aside{padding-bottom:155px}}
