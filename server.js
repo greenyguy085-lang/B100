@@ -12,6 +12,9 @@ const maps=Array.from({length:25},(_,i)=>{
  const b=baseMaps[i%5],mechanic=['plates','gate','timer','sequence','keys','hybrid'][Math.min(5,Math.floor(i/4))];
  const walls=b.walls.map(w=>[...w]);const taken=new Set(walls.map(w=>w.join(',')));
  if(i>=5){const col=6+i%5,gap=1+i%7;for(let y=1;y<=7;y++)if(y!==gap&&y!==Math.max(1,gap-1)&&!taken.has(col+','+y))walls.push([col,y])}
+ // Extend divider walls through the last floor row, so there is no invisible wall gap.
+ const columns=new Set(walls.filter(([x,y])=>y===6).map(([x])=>x));
+ for(const x of columns){if(!walls.some(([wx,wy])=>wx===x&&wy===7))walls.push([x,7])}
  const blocked=new Set(walls.map(w=>w.join(',')));
  const choose=(spots,fallback)=>spots.find(p=>!blocked.has(p.join(',')))||fallback;
  const a=choose([[8,6],[8,2],[9,6],[9,2],[10,6],[10,2],[7,6],[7,2]],[8,6]);
