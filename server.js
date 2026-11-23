@@ -52,8 +52,28 @@ const broadcast=(r,v)=>r.players.forEach(p=>send(p.ws,v));
 const safeAvatar=v=>typeof v==='string'&&/^[0-4]{1024}$/.test(v)?v:null;
 function layoutFor(r){
  const base=maps[Math.min(49,r.level-1)],count=r.solo?1:r.players.size;
- if(count<3)return base;
+ if(count<3&&!r.hardcore)return base;
  const map={...base,plates:base.plates.map(p=>[...p]),levers:base.levers.map(p=>[...p]),tokens:base.tokens.map(p=>[...p]),order:[...base.order],tokenOrder:[...base.tokenOrder],requirements:[...base.requirements]};
+ if(r.hardcore){
+  // Hardcore is a separate layout: approximately 3x the area, plus a five-stage circuit.
+  const oldX=map.maxX,oldY=map.maxY;
+  map.maxX=Math.ceil(oldX*1.75);map.maxY=Math.ceil(oldY*1.75);
+  map.blind=base.blind;
+  map.requirements=[...new Set([...map.requirements,'levers','tokens','beacon','chain'])];
+  map.hint='HARDCORE 15X: three-times-larger arena, extended lever and token routes, five charging stations in order, and every existing chamber objective. Wrong levers reset the chain.';
+  map.difficulty=(base.difficulty||1)*15;
+  // New floor tiles stay connected to the original map; walls remain inside original bounds.
+  const reserved=new Set([...map.plates,...map.levers,...map.tokens,...(map.beacon?[map.beacon]:[]),...(map.syncPads||[]),...(map.chainPads||[])].map(p=>p.join(',')));
+  const available=[];
+  for(let y=1;y<=map.maxY;y++)for(let x=2;x<=map.maxX;x++)if(!reserved.has(x+','+y)&&!(x<4&&y>=3&&y<=5)&&!map.walls.some(([a,b])=>a===x&&b===y))available.push([x,y]);
+  // Deterministic, spread-out placement across the larger arena.
+  const take=(min=2)=>{let best=null,score=-1;for(const p of available){if(reserved.has(p.join(',')))continue;const d=Math.min(...[...reserved].map(k=>{const [x,y]=k.split(',').map(Number);return Math.hypot(x-p[0],y-p[1])}));if(d>score){score=d;best=p}}if(best){reserved.add(best.join(','));return best}return null};
+  while(map.levers.length<Math.max(7,base.levers.length+4)){const p=take();if(!p)break;map.order.push(map.levers.length);map.levers.push(p)}
+  while(map.tokens.length<Math.max(6,base.tokens.length+4)){const p=take();if(!p)break;map.tokenOrder.push(map.tokens.length);map.tokens.push(p)}
+  if(!map.beacon)map.beacon=take();
+  while(map.chainPads.length<5){const p=take();if(!p)break;map.chainPads.push(p)}
+  map.duration=Math.max(30000,map.duration*3);
+ }
  const walls=new Set(map.walls.map(p=>p.join(',')));
  const reachable=new Set(['2,4']),q=[[2,4]];
  for(let n=0;n<q.length;n++){const [x,y]=q[n];for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const a=x+dx,b=y+dy,k=a+','+b;if(a<2||a>map.maxX||b<1||b>map.maxY||walls.has(k)||reachable.has(k))continue;reachable.add(k);q.push([a,b])}}
@@ -66,10 +86,10 @@ function layoutFor(r){
   occupied.add(best.join(','));return best
  };
  while(map.plates.length<count){const p=choose(map.plates,1.5);if(!p)break;map.plates.push(p)}
- if(map.requirements.includes('levers'))for(let n=0;n<count-2;n++){const p=choose([...map.plates,...map.levers],1.5);if(p){map.levers.push(p);map.order.push(map.levers.length-1)}}
+ if(map.requirements.includes('levers'))for(let n=0;n<Math.max(0,count-2);n++){const p=choose([...map.plates,...map.levers],1.5);if(p){map.levers.push(p);map.order.push(map.levers.length-1)}}
  if(map.requirements.includes('tokens'))for(let n=0;n<count-2;n++){const p=choose([...map.plates,...map.levers,...map.tokens],1.5);if(p){map.tokens.push(p);map.tokenOrder.push(map.tokens.length-1)}}
  // Time is adjusted to the longer routes instead of becoming impossible with more players.
- map.duration=Math.round(map.duration*(count===4?1.5:1.25));
+ map.duration=Math.round(map.duration*(count===4?1.5:count===3?1.25:1));
  return map;
 }
 function resetPuzzle(r){r.visited=[];r.solved=false;r.gate=false;r.key=false;r.progress=0;r.armed=true;r.until=0;r.leverStep=0;r.tokenStep=0;r.sequenceStep=0;r.lastLever=-1;r.lastToken=-1;r.lastPlate=-1;r.memoryStep=0;r.lastMemory=-1;r.leverHeld=[];r.tokenHeld=[];r.plateHeld=[];r.reverseStep=0;r.echoStep=0;r.sweepStep=0;r.lastLeverPlayer=null;r.handoffStep=0;r.beaconCharge=0;r.beaconDone=false;r.syncCharge=0;r.syncDone=false;r.chainStep=0;r.chainCharge=0;r.lastUpdate=Date.now()}
@@ -127,14 +147,15 @@ function update(r){
   const ready=(!req.includes('levers')||r.leverStep>=map.levers.length)&&(!req.includes('tokens')||r.tokenStep>=map.tokens.length)&&(!req.includes('sequence')||r.sequenceStep>=map.plates.length)&&(!req.includes('reverse')||r.reverseStep>=map.levers.length)&&(!req.includes('handoff')||r.handoffStep>=map.levers.length)&&(!req.includes('echo')||r.echoStep>=map.plates.length)&&(!req.includes('sweep')||r.sweepStep>=map.tokens.length)&&(!req.includes('timer')||Date.now()<r.until)&&(!req.includes('beacon')||r.beaconDone)&&(!req.includes('sync')||r.syncDone)&&(!req.includes('chain')||r.chainStep>=map.chainPads.length);
   if((ps.length>=2&&r.active.every(Boolean)||r.solo&&r.visited.every(Boolean))&&ready)r.solved=true;
  }
- broadcast(r,{type:'state',code:r.code,started:r.started,level:r.level,layout:map,players:ps.map(({id,name,x,y,avatar})=>({id,name,x,y,avatar})),host:r.host,active:r.active,solved:r.solved,gate:r.leverStep>=map.levers.length,key:r.tokenStep>=map.tokens.length,progress:r.sequenceStep||0,leverStep:r.leverStep||0,tokenStep:r.tokenStep||0,reverseStep:r.reverseStep||0,echoStep:r.echoStep||0,sweepStep:r.sweepStep||0,handoffStep:r.handoffStep||0,beaconCharge:r.beaconCharge||0,beaconDone:!!r.beaconDone,syncCharge:r.syncCharge||0,syncDone:!!r.syncDone,chainStep:r.chainStep||0,chainCharge:r.chainCharge||0,remaining:Math.max(0,(r.until||0)-Date.now()),solo:!!r.solo,visited:r.visited||[],canSkip:ps.some(p=>p.id===r.host&&p.name.toLowerCase()==='quay')});
+ broadcast(r,{type:'state',code:r.code,started:r.started,level:r.level,hardcore:!!r.hardcore,layout:map,players:ps.map(({id,name,x,y,avatar})=>({id,name,x,y,avatar})),host:r.host,active:r.active,solved:r.solved,gate:r.leverStep>=map.levers.length,key:r.tokenStep>=map.tokens.length,progress:r.sequenceStep||0,leverStep:r.leverStep||0,tokenStep:r.tokenStep||0,reverseStep:r.reverseStep||0,echoStep:r.echoStep||0,sweepStep:r.sweepStep||0,handoffStep:r.handoffStep||0,beaconCharge:r.beaconCharge||0,beaconDone:!!r.beaconDone,syncCharge:r.syncCharge||0,syncDone:!!r.syncDone,chainStep:r.chainStep||0,chainCharge:r.chainCharge||0,remaining:Math.max(0,(r.until||0)-Date.now()),solo:!!r.solo,visited:r.visited||[],canSkip:ps.some(p=>p.id===r.host&&p.name.toLowerCase()==='quay')});
 }
 function valid(r,x,y){return Number.isFinite(x)&&Number.isFinite(y)&&x>=1.16&&x<=layoutFor(r).maxX+1-.16&&y>=1.16&&y<=layoutFor(r).maxY+1-.16&&(!r.started||!layoutFor(r).walls.some(([a,b])=>Math.pow(x-Math.max(a,Math.min(x,a+1)),2)+Math.pow(y-Math.max(b,Math.min(y,b+1)),2)<.16*.16))}
 function spawn(r){[...r.players.values()].forEach((p,i)=>{p.x=2.5+i*.55;p.y=4.5})}
 wss.on('connection',ws=>{let room=null,id=null;ws.on('message',raw=>{if(raw.length>12000)return;let m;try{m=JSON.parse(raw)}catch{return}if(!m||typeof m!=='object')return;
-if(m.type==='create'||m.type==='join'){if(room)return;let r=m.type==='join'?rooms.get(String(m.code||'').trim().toUpperCase()):null;if(m.type==='join'&&!r)return send(ws,{type:'error',message:'Room not found'});if(r&&r.players.size>=4)return send(ws,{type:'error',message:'Room is full'});if(r&&r.started)return send(ws,{type:'error',message:'Game already started'});if(!r){let code;do{code=Math.random().toString(36).slice(2,7).toUpperCase()}while(rooms.has(code));r={code,players:new Map(),started:false,level:1,solved:false,host:null,active:[false,false],gate:false,key:false,progress:0,armed:true,until:0,solo:false,visited:[false,false]};rooms.set(code,r)}id=++seq;room=r;const name=String(m.name||'PLAYER').replace(/[^a-zA-Z0-9 _-]/g,'').trim().slice(0,16)||'PLAYER';r.players.set(id,{id,name,x:2.5+r.players.size*.55,y:4.5,avatar:safeAvatar(m.avatar),ws});if(!r.host)r.host=id;send(ws,{type:'welcome',id});update(r);return}
+if(m.type==='create'||m.type==='join'){if(room)return;let r=m.type==='join'?rooms.get(String(m.code||'').trim().toUpperCase()):null;if(m.type==='join'&&!r)return send(ws,{type:'error',message:'Room not found'});if(r&&r.players.size>=4)return send(ws,{type:'error',message:'Room is full'});if(r&&r.started)return send(ws,{type:'error',message:'Game already started'});if(!r){let code;do{code=Math.random().toString(36).slice(2,7).toUpperCase()}while(rooms.has(code));r={code,players:new Map(),started:false,level:1,solved:false,host:null,active:[false,false],gate:false,key:false,progress:0,armed:true,until:0,solo:false,hardcore:false,visited:[false,false]};rooms.set(code,r)}id=++seq;room=r;const name=String(m.name||'PLAYER').replace(/[^a-zA-Z0-9 _-]/g,'').trim().slice(0,16)||'PLAYER';r.players.set(id,{id,name,x:2.5+r.players.size*.55,y:4.5,avatar:safeAvatar(m.avatar),ws});if(!r.host)r.host=id;send(ws,{type:'welcome',id});update(r);return}
 if(!room)return;
 if(m.type==='avatar'){const a=safeAvatar(m.avatar);if(a){room.players.get(id).avatar=a;update(room)}}
+if(m.type==='mode'&&room.host===id&&!room.started){room.hardcore=m.hardcore===true;update(room)}
 if(m.type==='start'&&room.host===id&&!room.started&&(room.players.size>=2||room.players.get(id)?.name.toLowerCase()==='quay')){room.started=true;room.solo=room.players.size===1;resetPuzzle(room);spawn(room);update(room)}
 if(m.type==='move'){const p=room.players.get(id),x=Number(m.x),y=Number(m.y);if(p&&valid(room,x,y)&&Math.hypot(x-p.x,y-p.y)<1.2){p.x=x;p.y=y;update(room)}}
 if(m.type==='next'&&room.started&&room.host===id&&room.solved){room.level=Math.min(50,room.level+1);resetPuzzle(room);spawn(room);update(room)}
