@@ -64,7 +64,31 @@ function layoutFor(r){
   map.requirements=[...new Set([...map.requirements,'levers','tokens','beacon','chain'])];
   map.hint='HARDCORE 15X: three-times-larger arena, extended lever and token routes, five charging stations in order, and every existing chamber objective. Wrong levers reset the chain.';
   map.difficulty=(base.difficulty||1)*15;
-  // New floor tiles stay connected to the original map; walls remain inside original bounds.
+  // Extend the maze throughout the enlarged arena, preserving open routes and objectives.
+  const protectedCells=new Set([...map.plates,...map.levers,...map.tokens,...(map.beacon?[map.beacon]:[]),...(map.syncPads||[]),...(map.chainPads||[])].map(p=>p.join(',')));
+  for(let y=1;y<=6;y++)for(let x=2;x<=5;x++)protectedCells.add(x+','+y);
+  const wallSet=new Set(map.walls.map(p=>p.join(',')));
+  let seed=(r.level*739391+1733)>>>0;
+  const rand=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296};
+  const cells=[];
+  for(let y=1;y<=map.maxY;y++)for(let x=2;x<=map.maxX;x++)
+   if(x>oldX||y>oldY)cells.push([x,y]);
+  for(let i=cells.length-1;i>0;i--){const k=Math.floor(rand()*(i+1));[cells[i],cells[k]]=[cells[k],cells[i]]}
+  const connected=()=>{
+   const seen=new Set(['2,4']),queue=[[2,4]];
+   for(let i=0;i<queue.length;i++){const [x,y]=queue[i];for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+dx,ny=y+dy,key=nx+','+ny;if(nx<2||nx>map.maxX||ny<1||ny>map.maxY||seen.has(key)||wallSet.has(key))continue;seen.add(key);queue.push([nx,ny])}}
+   return seen.size===(map.maxX-1)*map.maxY-wallSet.size
+  };
+  let added=0,target=Math.floor(cells.length*.23);
+  for(const [x,y] of cells){
+   if(added>=target)break;
+   const key=x+','+y;
+   if(protectedCells.has(key))continue;
+   wallSet.add(key);
+   if(connected())added++;else wallSet.delete(key);
+  }
+  map.walls=[...wallSet].map(k=>k.split(',').map(Number));
+  // New floor tiles stay connected to the original map; walls now cover the expanded bounds.
   const reserved=new Set([...map.plates,...map.levers,...map.tokens,...(map.beacon?[map.beacon]:[]),...(map.syncPads||[]),...(map.chainPads||[])].map(p=>p.join(',')));
   const available=[];
   for(let y=1;y<=map.maxY;y++)for(let x=2;x<=map.maxX;x++)if(!reserved.has(x+','+y)&&!(x<4&&y>=3&&y<=5)&&!map.walls.some(([a,b])=>a===x&&b===y))available.push([x,y]);
