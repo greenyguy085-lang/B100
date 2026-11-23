@@ -1,4 +1,29 @@
-const $=id=>document.getElementById(id),canvas=$('board'),ctx=canvas.getContext('2d'),paint=$('paint'),pc=paint.getContext('2d'),T=72,OX=56,OY=32,colors=['#000000','#555657','#999b99','#e7e5df'],keys=new Set(),cache=new Map();let ws,id,room,px=null,py=null,lastSend=0,last=performance.now(),ink=3,drag=false;
+const $=id=>document.getElementById(id),canvas=$('board'),ctx=canvas.getContext('2d'),paint=$('paint'),pc=paint.getContext('2d'),T=72,OX=56,OY=32,colors=['#000000','#555657','#999b99','#e7e5df'],keys=new Set(),cache=new Map();let ws,id,room,px=null,py=null,lastSend=0,last=performance.now(),ink=3,drag=false,deviceMode=null,joyX=0,joyY=0,joyPointer=null;
+function chooseDevice(mode){
+ deviceMode=mode;
+ $('deviceChoice').hidden=true;
+ $('landing').hidden=!!room;
+ if(room)$('game').hidden=false;
+ $('mobileJoystick').hidden=mode!=='mobile';
+ $('controlInstructions').textContent=mode==='mobile'?'Drag the left joystick to move. Release to stop.':'WASD / ARROW KEYS — Move';
+ joyX=joyY=0;joyPointer=null;
+}
+$('chooseComputer').onclick=()=>chooseDevice('computer');
+$('chooseMobile').onclick=()=>chooseDevice('mobile');
+$('switchDevice').onclick=()=>{joyX=joyY=0;joyPointer=null;$('deviceChoice').hidden=false;$('landing').hidden=true;$('game').hidden=true};
+const joy=$('mobileJoystick'),knob=$('joystickKnob');
+function moveJoystick(e){
+ const rect=joy.getBoundingClientRect(),cx=rect.left+rect.width/2,cy=rect.top+rect.height/2;
+ const dx=e.clientX-cx,dy=e.clientY-cy,dist=Math.hypot(dx,dy),radius=rect.width*.32;
+ const scale=dist>radius?radius/dist:1;
+ joyX=dx*scale/radius;joyY=dy*scale/radius;
+ if(Math.hypot(joyX,joyY)<.12)joyX=joyY=0;
+ knob.style.transform='translate('+joyX*radius+'px,'+joyY*radius+'px)';
+}
+joy.addEventListener('pointerdown',e=>{if(deviceMode!=='mobile'||joyPointer!==null)return;joyPointer=e.pointerId;joy.setPointerCapture(e.pointerId);moveJoystick(e);e.preventDefault()});
+joy.addEventListener('pointermove',e=>{if(e.pointerId===joyPointer){moveJoystick(e);e.preventDefault()}});
+function releaseJoystick(e){if(e.pointerId!==joyPointer)return;joyPointer=null;joyX=joyY=0;knob.style.transform='translate(0,0)'}
+joy.addEventListener('pointerup',releaseJoystick);joy.addEventListener('pointercancel',releaseJoystick);addEventListener('blur',()=>{joyX=joyY=0;joyPointer=null;knob.style.transform='translate(0,0)'});
 function defaultSprite(){return '0'.repeat(1024)}
 let avatar;try{avatar=localStorage.getItem('b100-avatar')}catch{}if(!/^[0-4]{1024}$/.test(avatar||''))avatar=defaultSprite();
 function sprite(data){if(!data||!/^[0-4]{1024}$/.test(data))data=defaultSprite();if(cache.has(data))return cache.get(data);const c=document.createElement('canvas');c.width=c.height=32;const x=c.getContext('2d');const im=x.createImageData(32,32),rgb=[[0,0,0,0],[35,36,37,255],[100,102,102,255],[171,173,171,255],[240,238,231,255]];for(let i=0;i<1024;i++)im.data.set(rgb[Number(data[i])],i*4);x.putImageData(im,0,0);if(cache.size>32)cache.clear();cache.set(data,c);return c}
@@ -12,7 +37,7 @@ function paintAt(e){const r=paint.getBoundingClientRect(),x=Math.floor((e.client
 paint.addEventListener('pointerdown',e=>{drag=true;paint.setPointerCapture(e.pointerId);paintAt(e)});paint.addEventListener('pointermove',e=>{if(drag)paintAt(e)});paint.addEventListener('pointerup',()=>drag=false);paint.addEventListener('pointercancel',()=>drag=false);
 addEventListener('keydown',e=>{if(['INPUT','TEXTAREA'].includes(document.activeElement.tagName)||!$('editor').hidden)return;const k=e.key.toLowerCase();if(k.startsWith('arrow'))e.preventDefault();keys.add(k)});addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));addEventListener('blur',()=>keys.clear());
 function blocked(x,y){return x<1.16||x>(room.started?room.layout.maxX+1-.16:13.84)||y<1.16||y>(room.started?room.layout.maxY+1-.16:7.84)||(room.started&&room.layout.walls.some(([a,b])=>Math.pow(x-Math.max(a,Math.min(x,a+1)),2)+Math.pow(y-Math.max(b,Math.min(y,b+1)),2)<.16*.16))}
-function frame(now){requestAnimationFrame(frame);const dt=Math.min((now-last)/1000,.05);last=now;if(!room)return;const me=room.players.find(p=>p.id===id);if(!me)return;if(px===null){px=me.x;py=me.y}let dx=Number(keys.has('d')||keys.has('arrowright'))-Number(keys.has('a')||keys.has('arrowleft')),dy=Number(keys.has('s')||keys.has('arrowdown'))-Number(keys.has('w')||keys.has('arrowup'));if((dx||dy)&&$('editor').hidden){const l=Math.hypot(dx,dy);dx/=l;dy/=l;const step=3.75*dt;if(!blocked(px+dx*step,py))px+=dx*step;if(!blocked(px,py+dy*step))py+=dy*step;if(now-lastSend>32&&ws?.readyState===1){ws.send(JSON.stringify({type:'move',x:px,y:py}));lastSend=now}}draw()}requestAnimationFrame(frame);
+function frame(now){requestAnimationFrame(frame);const dt=Math.min((now-last)/1000,.05);last=now;if(!room)return;const me=room.players.find(p=>p.id===id);if(!me)return;if(px===null){px=me.x;py=me.y}let dx=deviceMode==='mobile'?joyX:Number(keys.has('d')||keys.has('arrowright'))-Number(keys.has('a')||keys.has('arrowleft')),dy=deviceMode==='mobile'?joyY:Number(keys.has('s')||keys.has('arrowdown'))-Number(keys.has('w')||keys.has('arrowup'));if((dx||dy)&&$('editor').hidden&&$('deviceChoice').hidden){const l=Math.hypot(dx,dy);dx/=l;dy/=l;const step=3.75*dt*(deviceMode==='mobile'?Math.min(1,Math.hypot(joyX,joyY)):1);if(!blocked(px+dx*step,py))px+=dx*step;if(!blocked(px,py+dy*step))py+=dy*step;if(now-lastSend>32&&ws?.readyState===1){ws.send(JSON.stringify({type:'move',x:px,y:py}));lastSend=now}}draw()}requestAnimationFrame(frame);
 function draw(){ctx.fillStyle='#18191a';ctx.fillRect(0,0,1120,640);const g=ctx.createRadialGradient(560,310,30,560,310,660);g.addColorStop(0,'#414243');g.addColorStop(1,'#171819');ctx.fillStyle=g;ctx.fillRect(0,0,1120,640);ctx.save();const blind=room.started&&room.layout.blind,expanded=room.started&&room.level>16,zoom=expanded?(blind?.43:.57):1;const camX=(blind||expanded)?560/zoom-(px??2.5)*T:OX,camY=(blind||expanded)?320/zoom-(py??4.5)*T:OY;ctx.scale(zoom,zoom);ctx.translate(camX,camY);for(let y=1;y<=(room.started?room.layout.maxY:7);y++)for(let x=1;x<=(room.started?room.layout.maxX+1:13);x++){ctx.fillStyle=(x+y)%2?'#292a2b':'#303132';ctx.fillRect(x*T,y*T,T-2,T-2);}ctx.fillStyle='#171819';ctx.fillRect(T-9,T-9,(room.started?room.layout.maxX:12)*T+18,9);ctx.fillRect(T-9,(room.started?room.layout.maxY+1:8)*T,(room.started?room.layout.maxX:12)*T+18,9);
 if(!room.started){for(let x=2;x<=12;x+=2){ctx.fillStyle='#555655';ctx.fillRect(x*T+6,T+7,T-12,17);ctx.fillStyle='#343536';ctx.fillRect(x*T+10,T+25,T-20,34);ctx.strokeStyle='#797a76';ctx.lineWidth=2;ctx.strokeRect(x*T+10,T+25,T-20,34);ctx.fillStyle='#b2b1ac';ctx.font='11px monospace';ctx.textAlign='center';ctx.fillText('L'+String(x/2).padStart(2,'0'),(x+.5)*T,T+18)}ctx.fillStyle='#dedbd2';ctx.fillRect(6*T,6.8*T,2*T,8);ctx.fillStyle='#b5b5af';ctx.font='13px monospace';ctx.textAlign='center';ctx.fillText('WAITING AREA  /  CHARACTER LOCKERS',7.5*T,3*T)}
 else{ctx.fillStyle=room.solved?'#e5e3dd':'#686966';ctx.fillRect((room.layout.maxX+1)*T+1,3.25*T,12,1.5*T);room.layout.walls.forEach(([x,y])=>{ctx.fillStyle='#686868';ctx.fillRect(x*T,y*T,T,T)});if(room.layout.requirements?.includes('reverse')&&room.reverseStep<room.layout.levers.length&&room.leverStep===room.layout.levers.length){const next=room.layout.order[room.layout.order.length-1-room.reverseStep];const p=room.layout.levers[next];if(p){ctx.strokeStyle='#fff';ctx.lineWidth=5;ctx.strokeRect(p[0]*T+7,p[1]*T+7,T-14,T-14)}}
