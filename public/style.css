@@ -51,3 +51,25 @@
  .shell{padding:9px}
  aside{padding:12px}
 }
+
+/* Reliable mobile joystick: fixed thumb target independent of canvas dimensions */
+@media(max-width:700px){
+ #mobileJoystick:not([hidden]){
+  position:fixed!important;
+  left:max(16px,env(safe-area-inset-left))!important;
+  bottom:max(20px,env(safe-area-inset-bottom))!important;
+  top:auto!important;right:auto!important;
+  width:136px!important;height:136px!important;
+  z-index:9!important;display:grid!important;
+  touch-action:none!important;
+  -webkit-user-select:none!important;user-select:none!important;
+  overscroll-behavior:contain;
+  background:rgba(25,26,27,.82);
+  border:2px solid rgba(235,235,235,.7);
+  box-shadow:0 4px 22px #0009;
+ }
+ #mobileJoystick,#mobileJoystick *{touch-action:none!important;pointer-events:auto}
+ #joystickBase,#joystickKnob{pointer-events:none!important}
+ #mobileJoystick[hidden]{display:none!important}
+ #game:has(#mobileJoystick:not([hidden])) aside{padding-bottom:150px}
+}
