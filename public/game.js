@@ -1,21 +1,32 @@
-const $=id=>document.getElementById(id),canvas=$('board'),ctx=canvas.getContext('2d'),paint=$('paint'),pc=paint.getContext('2d'),T=72,OX=56,OY=32,colors=['#000000','#555657','#999b99','#e7e5df'],keys=new Set(),cache=new Map();let ws,id,room,px=null,py=null,lastSend=0,last=performance.now(),ink='#999b99',tool='brush',drag=false,deviceMode=null,joyX=0,joyY=0,joyPointer=null;
+const $=id=>document.getElementById(id),canvas=$('board'),ctx=canvas.getContext('2d'),paint=$('paint'),pc=paint.getContext('2d'),T=72,OX=56,OY=32,colors=['#000000','#555657','#999b99','#e7e5df'],keys=new Set(),cache=new Map();let ws,id,room,px=null,py=null,lastSend=0,last=performance.now(),ink='#999b99',tool='brush',drag=false,deviceMode=null,joyX=0,joyY=0,joyPointer=null,mobileControlType='joystick',buttonPointers=new Map();
 const joy=$('mobileJoystick'),knob=$('joystickKnob');
 function resetJoystick(){
  joyX=0;joyY=0;joyPointer=null;
  knob.style.transform='translate3d(0,0,0)';
 }
+function resetButtons(){buttonPointers.clear();document.querySelectorAll('#mobileButtons button').forEach(b=>b.classList.remove('pressed'))}
+function setMobileControlType(type){
+ mobileControlType=type==='buttons'?'buttons':'joystick';resetJoystick();resetButtons();
+ $('mobileControlType').value=mobileControlType;
+ joy.hidden=deviceMode!=='mobile'||mobileControlType!=='joystick';
+ $('mobileButtons').hidden=deviceMode!=='mobile'||mobileControlType!=='buttons';
+ $('mobileControlSettings').hidden=deviceMode!=='mobile';
+ $('controlInstructions').textContent=deviceMode==='mobile'?(mobileControlType==='buttons'?'Hold the direction buttons to walk.':'Hold and drag the joystick to walk. Release to stop.'):'WASD / ARROW KEYS — Move';
+ try{localStorage.setItem('b100-mobile-controls',mobileControlType)}catch{}
+}
+try{mobileControlType=localStorage.getItem('b100-mobile-controls')==='buttons'?'buttons':'joystick'}catch{}
+$('mobileControlType').onchange=e=>setMobileControlType(e.target.value);
 function chooseDevice(mode){
  resetJoystick();deviceMode=mode;
  $('deviceChoice').hidden=true;
  $('landing').hidden=!!room;
  if(room)$('game').hidden=false;
- joy.hidden=mode!=='mobile';
- $('controlInstructions').textContent=mode==='mobile'?'Hold and drag the joystick to walk. Release to stop.':'WASD / ARROW KEYS — Move';
+ setMobileControlType(mobileControlType);
 }
 $('chooseComputer').onclick=()=>chooseDevice('computer');
 $('chooseMobile').onclick=()=>chooseDevice('mobile');
 $('switchDevice').onclick=()=>{
- resetJoystick();$('deviceChoice').hidden=false;$('landing').hidden=true;$('game').hidden=true
+ resetJoystick();resetButtons();$('mobileButtons').hidden=true;joy.hidden=true;$('mobileControlSettings').hidden=true;$('deviceChoice').hidden=false;$('landing').hidden=true;$('game').hidden=true
 };
 function updateJoystick(clientX,clientY){
  const rect=joy.getBoundingClientRect();
@@ -51,7 +62,15 @@ window.addEventListener('pointermove',joystickMove,{passive:false});
 window.addEventListener('pointerup',joystickEnd,{passive:false});
 window.addEventListener('pointercancel',joystickEnd,{passive:false});
 window.addEventListener('blur',resetJoystick);
-document.addEventListener('visibilitychange',()=>{if(document.hidden)resetJoystick()});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){resetJoystick();resetButtons()}});
+window.addEventListener('blur',resetButtons);
+const directions={up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]};
+for(const button of document.querySelectorAll('#mobileButtons button')){
+ button.addEventListener('pointerdown',e=>{if(deviceMode!=='mobile'||mobileControlType!=='buttons')return;buttonPointers.set(e.pointerId,button.dataset.direction);button.classList.add('pressed');try{button.setPointerCapture(e.pointerId)}catch{}e.preventDefault()},{passive:false});
+ const release=e=>{if(!buttonPointers.has(e.pointerId))return;buttonPointers.delete(e.pointerId);button.classList.toggle('pressed',[...buttonPointers.values()].includes(button.dataset.direction));e.preventDefault()};
+ button.addEventListener('pointerup',release,{passive:false});button.addEventListener('pointercancel',release,{passive:false});button.addEventListener('lostpointercapture',e=>{buttonPointers.delete(e.pointerId);button.classList.toggle('pressed',[...buttonPointers.values()].includes(button.dataset.direction))});
+}
+
 const legacyColors=['','#232425','#646666','#abadab','#f0eee7'];
 function defaultSprite(){return '0000000'.repeat(1024)}
 function normalizeAvatar(data){
@@ -97,7 +116,7 @@ function paintAt(e){
 paint.addEventListener('pointerdown',e=>{drag=true;paint.setPointerCapture(e.pointerId);paintAt(e)});paint.addEventListener('pointermove',e=>{if(drag&&(tool==='brush'||tool==='eraser'))paintAt(e)});paint.addEventListener('pointerup',()=>drag=false);paint.addEventListener('pointercancel',()=>drag=false);
 addEventListener('keydown',e=>{if(['INPUT','TEXTAREA'].includes(document.activeElement.tagName)||!$('editor').hidden)return;const k=e.key.toLowerCase();if(k.startsWith('arrow'))e.preventDefault();keys.add(k)});addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));addEventListener('blur',()=>keys.clear());
 function blocked(x,y){return x<1.16||x>(room.started?room.layout.maxX+1-.16:13.84)||y<1.16||y>(room.started?room.layout.maxY+1-.16:7.84)||(room.started&&room.layout.walls.some(([a,b])=>Math.pow(x-Math.max(a,Math.min(x,a+1)),2)+Math.pow(y-Math.max(b,Math.min(y,b+1)),2)<.16*.16))}
-function frame(now){requestAnimationFrame(frame);const dt=Math.min((now-last)/1000,.05);last=now;if(!room)return;const me=room.players.find(p=>p.id===id);if(!me)return;if(px===null){px=me.x;py=me.y}let dx=deviceMode==='mobile'?joyX:Number(keys.has('d')||keys.has('arrowright'))-Number(keys.has('a')||keys.has('arrowleft')),dy=deviceMode==='mobile'?joyY:Number(keys.has('s')||keys.has('arrowdown'))-Number(keys.has('w')||keys.has('arrowup'));if((dx||dy)&&$('editor').hidden&&$('deviceChoice').hidden){const l=Math.hypot(dx,dy);dx/=l;dy/=l;const step=3.75*dt*(deviceMode==='mobile'?Math.min(1,Math.hypot(joyX,joyY)):1);if(!blocked(px+dx*step,py))px+=dx*step;if(!blocked(px,py+dy*step))py+=dy*step;if(now-lastSend>32&&ws?.readyState===1){ws.send(JSON.stringify({type:'move',x:px,y:py}));lastSend=now}}draw()}requestAnimationFrame(frame);
+function frame(now){requestAnimationFrame(frame);const dt=Math.min((now-last)/1000,.05);last=now;if(!room)return;const me=room.players.find(p=>p.id===id);if(!me)return;if(px===null){px=me.x;py=me.y}let bx=0,by=0;if(deviceMode==='mobile'&&mobileControlType==='buttons')for(const direction of buttonPointers.values()){bx+=directions[direction][0];by+=directions[direction][1]}let dx=deviceMode==='mobile'?(mobileControlType==='buttons'?bx:joyX):Number(keys.has('d')||keys.has('arrowright'))-Number(keys.has('a')||keys.has('arrowleft')),dy=deviceMode==='mobile'?(mobileControlType==='buttons'?by:joyY):Number(keys.has('s')||keys.has('arrowdown'))-Number(keys.has('w')||keys.has('arrowup'));if((dx||dy)&&$('editor').hidden&&$('deviceChoice').hidden){const l=Math.hypot(dx,dy);dx/=l;dy/=l;const step=3.75*dt*(deviceMode==='mobile'&&mobileControlType==='joystick'?Math.min(1,Math.hypot(joyX,joyY)):1);if(!blocked(px+dx*step,py))px+=dx*step;if(!blocked(px,py+dy*step))py+=dy*step;if(now-lastSend>32&&ws?.readyState===1){ws.send(JSON.stringify({type:'move',x:px,y:py}));lastSend=now}}draw()}requestAnimationFrame(frame);
 function draw(){ctx.fillStyle='#18191a';ctx.fillRect(0,0,1120,640);const g=ctx.createRadialGradient(560,310,30,560,310,660);g.addColorStop(0,'#414243');g.addColorStop(1,'#171819');ctx.fillStyle=g;ctx.fillRect(0,0,1120,640);ctx.save();const blind=room.started&&room.layout.blind,expanded=room.started&&room.level>16;
 const mapW=room.started?room.layout.maxX+1:13,mapH=room.started?room.layout.maxY+1:8;
 const fullFit=Math.min(1,(canvas.width-36)/(mapW*T),(canvas.height-36)/(mapH*T));
