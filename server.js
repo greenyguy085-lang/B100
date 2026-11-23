@@ -17,14 +17,14 @@ const maps=Array.from({length:50},(_,i)=>{
  const special=i===29;
  let seed=(7919+i*104729)>>>0;
  const rand=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296};
- const blind=(i+1)%10===0, maxX=blind?26:12,maxY=blind?15:7,area=(maxX-1)*maxY;
+ const blind=(i+1)%10===0,expanded=i>=16,maxX=blind?(expanded?44:26):(expanded?23:12),maxY=blind?(expanded?28:15):(expanded?14:7),area=(maxX-1)*maxY;
  const walls=new Set(),spawn=new Set(['2,3','2,4','2,5','3,3','3,4','3,5']);
  const all=[];for(let y=1;y<=maxY;y++)for(let x=2;x<=maxX;x++)if(!spawn.has(x+','+y))all.push([x,y]);
  const reachable=()=>{const seen=new Set(['2,4']),q=[[2,4]];for(let n=0;n<q.length;n++){const [x,y]=q[n];for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const xx=x+dx,yy=y+dy,k=xx+','+yy;if(xx<2||xx>maxX||yy<1||yy>maxY||seen.has(k)||walls.has(k))continue;seen.add(k);q.push([xx,yy])}}return seen};
  // Room one is completely open. Later rooms add more randomized walls,
  // accepting a wall only when every remaining floor tile stays accessible.
- const target=i===0?0:blind?Math.floor(area*.38):Math.min(33,4+Math.floor(i*1.25));
- for(let attempt=0;attempt<(blind?4000:600)&&walls.size<target;attempt++){
+ const target=i===0?0:blind?Math.floor(area*.33):expanded?Math.floor(area*.29):Math.min(33,4+Math.floor(i*1.25));
+ for(let attempt=0;attempt<(blind?11000:expanded?3500:600)&&walls.size<target;attempt++){
   const [x,y]=all[Math.floor(rand()*all.length)],key=x+','+y;
   if(walls.has(key))continue;
   walls.add(key);
@@ -32,18 +32,18 @@ const maps=Array.from({length:50},(_,i)=>{
  }
  const distances=new Map([['2,4',0]]),q=[[2,4]];
  for(let n=0;n<q.length;n++){const [x,y]=q[n],d=distances.get(x+','+y);for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const xx=x+dx,yy=y+dy,k=xx+','+yy;if(xx<2||xx>maxX||yy<1||yy>maxY||walls.has(k)||distances.has(k))continue;distances.set(k,d+1);q.push([xx,yy])}}
- const choices=[...distances].filter(([k,d])=>d>=5&&Number(k.split(',')[0])>=5).sort((a,b)=>b[1]-a[1]);
+ const choices=[...distances].filter(([k,d])=>d>=(expanded?9:5)&&Number(k.split(',')[0])>=5).sort((a,b)=>b[1]-a[1]);
  const pick=(offset,excluded=[])=>{const filtered=choices.filter(([k])=>!excluded.includes(k));const key=filtered[Math.min(filtered.length-1,Math.floor(rand()*Math.min(filtered.length,Math.max(3,offset))))]?.[0]||'10,4';return key.split(',').map(Number)};
- const plateA=pick(3);const far=choices.filter(([key])=>{const [x,y]=key.split(',').map(Number);return Math.hypot(x-plateA[0],y-plateA[1])>= (blind?10:5)});const plateB=(far[Math.floor(rand()*Math.min(far.length,12))]?.[0]||choices.find(([key])=>{const [x,y]=key.split(',').map(Number);return Math.hypot(x-plateA[0],y-plateA[1])>=4})?.[0]||'11,2').split(',').map(Number);
+ const plateA=pick(expanded?12:3);const far=choices.filter(([key])=>{const [x,y]=key.split(',').map(Number);return Math.hypot(x-plateA[0],y-plateA[1])>= (blind?(expanded?16:10):expanded?9:5)});const plateB=(far[Math.floor(rand()*Math.min(far.length,12))]?.[0]||choices.find(([key])=>{const [x,y]=key.split(',').map(Number);return Math.hypot(x-plateA[0],y-plateA[1])>=4})?.[0]||'11,2').split(',').map(Number);
  const used=[plateA.join(','),plateB.join(',')];
  const choose=(minDistance=3)=>{const pool=choices.filter(([key])=>{const [x,y]=key.split(',').map(Number);return !used.includes(key)&&used.every(k=>{const [a,b]=k.split(',').map(Number);return Math.hypot(x-a,y-b)>=minDistance})});const key=(pool[Math.floor(rand()*Math.min(18,pool.length))]||choices.find(([k])=>!used.includes(k))||['10,4'])[0];used.push(key);return key.split(',').map(Number)};
- const levers=Array.from({length:requirements.includes('levers')?Math.min(6,2+Math.floor(i/8)):0},()=>choose(3));
- const tokens=Array.from({length:requirements.includes('tokens')?Math.min(5,2+Math.floor(i/9)):0},()=>choose(2));
+ const levers=Array.from({length:requirements.includes('levers')?Math.min(9,2+Math.floor(i/5)):0},()=>choose(3));
+ const tokens=Array.from({length:requirements.includes('tokens')?Math.min(8,2+Math.floor(i/6)):0},()=>choose(2));
  const beacon=requirements.includes('beacon')?choose(2):null,syncPads=requirements.includes('sync')?[choose(2),choose(2)]:[],chainPads=requirements.includes('chain')?[choose(2),choose(2)]:[];
  const lever=levers[0]||choose(),token=tokens[0]||choose();
  const order=levers.map((_,k)=>k);for(let k=order.length-1;k>0;k--){const n=Math.floor(rand()*(k+1));[order[k],order[n]]=[order[n],order[k]]}
  const tokenOrder=tokens.map((_,k)=>k);for(let k=tokenOrder.length-1;k>0;k--){const n=Math.floor(rand()*(k+1));[tokenOrder[k],tokenOrder[n]]=[tokenOrder[n],tokenOrder[k]]}
- return {name:names[i]||'CHAMBER '+String(i+1).padStart(2,'0'),hint:i>=41?'CHAIN STATIONS: charge each square station in order by standing on it for 1.2 seconds. Also complete earlier objectives.':i>=33?'SYNC PADS: two different players hold both hexagon pads for 1.6 seconds together. Solo mode allows one pad.':i>=25?'CHARGE BEACON: stand on the diamond for 2.2 seconds to power it, then complete the other objectives.':i>=42?'TOKEN SWEEP: finish tokens in numbered order, then repeat them backwards. Complete the lever reversal, alternating-player handoff, and plate echo too.':i>=36?'PLATE ECHO: activate the plates 1 to '+(2)+' in order, then activate them in reverse order. Finish all previous objectives.':i>=32?'HANDOFF: different players must take turns activating successive levers. Finish the forward and reverse lever sequences.':i>=24?'REVERSE LEVERS: complete the numbered levers, then activate them again in reverse order.':i>=16?'TOKEN CIRCUIT: collect the numbered tokens in order, then complete the previous objectives.':i>=12?'PLATE SEQUENCE: activate the plates in order before everyone holds their assigned plate.':i>=8&&!blind?'TIMED RELAY: complete the levers before the timer expires.':i>=4?'Activate the numbered levers in order.':'Hold every pressure plate simultaneously.',plates:[plateA,plateB],walls:[...walls].map(k=>k.split(',').map(Number)),mechanic,requirements,levers,tokens,beacon,syncPads,chainPads,order,tokenOrder,lever,token,blind,maxX,maxY,duration:Math.max(3000,9000-(i-8)*220),difficulty:Number(Math.pow(1.5,i/4).toFixed(2))};
+ return {name:names[i]||'CHAMBER '+String(i+1).padStart(2,'0'),hint:i>=41?'CHAIN STATIONS: charge each square station in order by standing on it for 1.2 seconds. Also complete earlier objectives.':i>=33?'SYNC PADS: two different players hold both hexagon pads for 1.6 seconds together. Solo mode allows one pad.':i>=25?'CHARGE BEACON: stand on the diamond for 2.2 seconds to power it, then complete the other objectives.':i>=42?'TOKEN SWEEP: finish tokens in numbered order, then repeat them backwards. Complete the lever reversal, alternating-player handoff, and plate echo too.':i>=36?'PLATE ECHO: activate the plates 1 to '+(2)+' in order, then activate them in reverse order. Finish all previous objectives.':i>=32?'HANDOFF: different players must take turns activating successive levers. Finish the forward and reverse lever sequences.':i>=24?'REVERSE LEVERS: complete the numbered levers, then activate them again in reverse order.':i>=16?'TOKEN CIRCUIT: collect the numbered tokens in order, then complete the previous objectives.':i>=12?'PLATE SEQUENCE: activate the plates in order before everyone holds their assigned plate.':i>=8&&!blind?'TIMED RELAY: complete the levers before the timer expires.':i>=4?'Activate the numbered levers in order.':'Hold every pressure plate simultaneously.',plates:[plateA,plateB],walls:[...walls].map(k=>k.split(',').map(Number)),mechanic,requirements,levers,tokens,beacon,syncPads,chainPads,order,tokenOrder,lever,token,blind,maxX,maxY,duration:expanded?18000:Math.max(3000,9000-(i-8)*220),difficulty:Number((expanded?4:1)*Math.pow(1.5,i/4).toFixed(2))};
 });
 const server=http.createServer((req,res)=>{let u;try{u=decodeURIComponent(new URL(req.url,'http://localhost').pathname)}catch{res.writeHead(400);return res.end()}const p=path.resolve(root,'.'+(u==='/'?'/index.html':u));if(!p.startsWith(root+path.sep)){res.writeHead(403);return res.end()}fs.readFile(p,(e,d)=>{if(e){res.writeHead(404);return res.end('Not found')}res.writeHead(200,{'Content-Type':{'.html':'text/html','.js':'text/javascript','.css':'text/css'}[path.extname(p)]||'application/octet-stream'});res.end(d)})});
 const wss=new WebSocket.Server({server}),rooms=new Map();let seq=0;
@@ -57,7 +57,7 @@ function layoutFor(r){
  const walls=new Set(map.walls.map(p=>p.join(',')));
  const reachable=new Set(['2,4']),q=[[2,4]];
  for(let n=0;n<q.length;n++){const [x,y]=q[n];for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const a=x+dx,b=y+dy,k=a+','+b;if(a<2||a>map.maxX||b<1||b>map.maxY||walls.has(k)||reachable.has(k))continue;reachable.add(k);q.push([a,b])}}
- const occupied=new Set([...map.plates,...map.levers,...map.tokens].map(p=>p.join(',')));
+ const occupied=new Set([...map.plates,...map.levers,...map.tokens,...(map.beacon?[map.beacon]:[]),...(map.syncPads||[]),...(map.chainPads||[])].map(p=>p.join(',')));
  const candidates=[...reachable].map(k=>k.split(',').map(Number)).filter(([x,y])=>Math.hypot(x-2,y-4)>3);
  const choose=(existing,minDist)=>{
   let best=null,score=-1;
