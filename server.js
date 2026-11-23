@@ -8,10 +8,11 @@ const baseMaps=[
 {name:'THE FINAL PAIR',hint:'Both switches must be held at once.',plates:[[4,6],[12,2]],walls:[[3,2],[3,3],[3,4],[5,1],[5,2],[5,3],[5,4],[7,3],[7,4],[7,5],[7,6],[9,1],[9,2],[9,3],[9,4],[11,3],[11,4],[11,5],[11,6]]}
 ];
 const names=['THE LONG WAY','THE DIVIDE','CIRCUIT','CROSS CURRENT','THE FINAL PAIR','SECOND LOCK','FALSE ROUTE','THE SPLIT','AFTER THE SIGNAL','HOLD THE LINE','DEAD END','THE CROSSING','FIRST SECOND THIRD','THE WRONG ORDER','FOUR CORNERS','MEMORY TEST','MISSING PIECE','LOCKED AWAY','THE SEARCH','THE EXCHANGE','DEEPER STILL','NARROW MARGIN','CHAIN REACTION','THE LAST TURN','THE TWENTY-FIFTH'];
+const blindLevel=i=>(i+1)%10===0;
 const maps=Array.from({length:50},(_,i)=>{
  const mechanic=['plates','gate','timer','sequence','keys','hybrid','memory','dual','reverse','gauntlet','master'][Math.min(10,Math.floor(i/4))];
  const requirements=i<4?[]:i<8?['levers']:i<12?['levers','timer']:i<16?['levers','sequence']:i<20?['levers','sequence','tokens']:i<24?['levers','sequence','tokens']:i<28?['levers','sequence','tokens','memory']:i<32?['levers','sequence','tokens','memory']:i<36?['levers','sequence','tokens','memory','reverse']:['levers','sequence','tokens','memory','reverse'];
- if(i===29){const t=requirements.indexOf('timer');if(t>=0)requirements.splice(t,1)}
+ if(blindLevel(i)){const t=requirements.indexOf('timer');if(t>=0)requirements.splice(t,1)}
  const special=i===29;
  let seed=(7919+i*104729)>>>0;
  const rand=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296};
@@ -57,18 +58,18 @@ function update(r){
   const req=map.requirements||[];
   const leverHit=map.levers.findIndex(on);
   if(leverHit!==r.lastLever&&leverHit>=0){
-   r.leverStep=leverHit===map.order[r.leverStep]?r.leverStep+1:0;
+   if(r.leverStep<map.levers.length)r.leverStep=leverHit===map.order[r.leverStep]?r.leverStep+1:leverHit===map.order[0]?1:0;
   }
   r.lastLever=leverHit;
   const tokenHit=map.tokens.findIndex(on);
   if(tokenHit!==r.lastToken&&tokenHit>=0){
-   r.tokenStep=tokenHit===map.tokenOrder[r.tokenStep]?r.tokenStep+1:0;
+   if(r.tokenStep<map.tokens.length)r.tokenStep=tokenHit===map.tokenOrder[r.tokenStep]?r.tokenStep+1:tokenHit===map.tokenOrder[0]?1:0;
   }
   r.lastToken=tokenHit;
   const plateHit=map.plates.findIndex(on);
   if(plateHit!==r.lastPlate&&plateHit>=0&&req.includes('sequence'))r.sequenceStep=plateHit===r.sequenceStep?r.sequenceStep+1:plateHit===0?1:0;
   r.lastPlate=plateHit;
-  if(req.includes('memory')&&leverHit!==r.lastMemory&&leverHit>=0)r.memoryStep=leverHit===map.order[r.memoryStep]?r.memoryStep+1:0;
+  if(req.includes('memory')&&leverHit!==r.lastMemory&&leverHit>=0)if(r.memoryStep<map.levers.length)r.memoryStep=leverHit===map.order[r.memoryStep]?r.memoryStep+1:leverHit===map.order[0]?1:0;
   r.lastMemory=leverHit;
   if(req.includes('timer')&&r.leverStep===map.levers.length&&Date.now()>r.until)r.until=Date.now()+map.duration;
   const ready=(!req.includes('levers')||r.leverStep>=map.levers.length)&&(!req.includes('tokens')||r.tokenStep>=map.tokens.length)&&(!req.includes('sequence')||r.sequenceStep>=2)&&(!req.includes('memory')||r.memoryStep>=map.levers.length)&&(!req.includes('timer')||Date.now()<r.until);
