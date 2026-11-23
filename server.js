@@ -87,13 +87,22 @@ function update(r){
   for(const {i,id} of leverHits){
    if(r.leverStep<map.levers.length){
     const expected=map.order[r.leverStep];
-    if(i===expected){
-     if(req.includes('handoff')&&!r.solo&&r.lastLeverPlayer!==null&&r.lastLeverPlayer===id){r.leverStep=0;r.handoffStep=0;r.lastLeverPlayer=null}
-     else{r.leverStep++;r.handoffStep=r.leverStep;r.lastLeverPlayer=id}
-    }else{r.leverStep=i===map.order[0]?1:0;r.handoffStep=r.leverStep;r.lastLeverPlayer=id}
+    const correct=i===expected&&(!req.includes('handoff')||r.solo||r.lastLeverPlayer===null||r.lastLeverPlayer!==id);
+    if(correct){r.leverStep++;r.handoffStep=r.leverStep;r.lastLeverPlayer=id}
+    else{
+     // Any incorrect lever, including one already used, breaks the chain.
+     // The first lever can immediately start a fresh attempt.
+     r.leverStep=i===map.order[0]?1:0;
+     r.handoffStep=r.leverStep;r.lastLeverPlayer=r.leverStep?id:null;
+     r.reverseStep=0;
+    }
    }else if(req.includes('reverse')&&r.reverseStep<map.levers.length){
     const reversed=[...map.order].reverse();
-    r.reverseStep=i===reversed[r.reverseStep]?r.reverseStep+1:i===reversed[0]?1:0;
+    if(i===reversed[r.reverseStep])r.reverseStep++;
+    else{
+     // Incorrect reverse input resets the reverse chain, not the finished forward chain.
+     r.reverseStep=i===reversed[0]?1:0;
+    }
    }
   }
   for(const {i} of tokenHits){
