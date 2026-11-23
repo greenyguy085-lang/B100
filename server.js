@@ -51,8 +51,10 @@ const send=(ws,v)=>{if(ws.readyState===1)ws.send(JSON.stringify(v))};
 const broadcast=(r,v)=>r.players.forEach(p=>send(p.ws,v));
 const safeAvatar=v=>typeof v==='string'&&/^[0-4]{1024}$/.test(v)?v:null;
 function layoutFor(r){
+ const cacheKey=r.level+':'+r.players.size+':'+!!r.solo+':'+!!r.hardcore;
+ if(r.layoutCacheKey===cacheKey&&r.layoutCache)return r.layoutCache;
  const base=maps[Math.min(49,r.level-1)],count=r.solo?1:r.players.size;
- if(count<3&&!r.hardcore)return base;
+ if(count<3&&!r.hardcore){r.layoutCacheKey=cacheKey;r.layoutCache=base;return base;}
  const map={...base,plates:base.plates.map(p=>[...p]),levers:base.levers.map(p=>[...p]),tokens:base.tokens.map(p=>[...p]),order:[...base.order],tokenOrder:[...base.tokenOrder],requirements:[...base.requirements]};
  if(r.hardcore){
   // Hardcore is a separate layout: approximately 3x the area, plus a five-stage circuit.
@@ -90,6 +92,7 @@ function layoutFor(r){
  if(map.requirements.includes('tokens'))for(let n=0;n<count-2;n++){const p=choose([...map.plates,...map.levers,...map.tokens],1.5);if(p){map.tokens.push(p);map.tokenOrder.push(map.tokens.length-1)}}
  // Time is adjusted to the longer routes instead of becoming impossible with more players.
  map.duration=Math.round(map.duration*(count===4?1.5:count===3?1.25:1));
+ r.layoutCacheKey=cacheKey;r.layoutCache=map;
  return map;
 }
 function resetPuzzle(r){r.visited=[];r.solved=false;r.gate=false;r.key=false;r.progress=0;r.armed=true;r.until=0;r.leverStep=0;r.tokenStep=0;r.sequenceStep=0;r.lastLever=-1;r.lastToken=-1;r.lastPlate=-1;r.memoryStep=0;r.lastMemory=-1;r.leverHeld=[];r.tokenHeld=[];r.plateHeld=[];r.reverseStep=0;r.echoStep=0;r.sweepStep=0;r.lastLeverPlayer=null;r.handoffStep=0;r.beaconCharge=0;r.beaconDone=false;r.syncCharge=0;r.syncDone=false;r.chainStep=0;r.chainCharge=0;r.lastUpdate=Date.now()}
@@ -162,4 +165,7 @@ if(m.type==='next'&&room.started&&room.host===id&&room.solved){room.level=Math.m
 if(m.type==='skip'&&room.host===id&&room.players.get(id)?.name.toLowerCase()==='quay'&&room.started){room.level=Math.min(50,Math.max(1,Math.floor(Number(m.level)||room.level+1)));room.solved=false;resetPuzzle(room);spawn(room);update(room)}
 if(m.type==='reset'&&room.started&&room.host===id){resetPuzzle(room);spawn(room);update(room)}
 });ws.on('close',()=>{if(!room)return;room.players.delete(id);if(!room.players.size)rooms.delete(room.code);else{if(room.host===id)room.host=room.players.keys().next().value;room.solved=false;update(room)}})});
+// Charging mechanics need server ticks even while players stand perfectly still.
+// Movement packets alone cannot advance a hold-to-charge timer.
+setInterval(()=>{for(const r of rooms.values())if(r.started&&!r.solved&&r.players.size)update(r)},50);
 server.listen(PORT,()=>console.log('B100 running on '+PORT));
