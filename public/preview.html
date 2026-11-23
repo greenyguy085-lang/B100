@@ -4,14 +4,32 @@
 <div class="layout"><div class="stage"><canvas id="board" width="1120" height="640" aria-label="Top down game map"></canvas><div id="completed" hidden><div class="eyebrow">CHAMBER COMPLETE</div><h2>DOOR UNLOCKED.</h2><button id="next" class="primary">NEXT CHAMBER →</button><p id="waiting" hidden>WAITING FOR HOST</p></div></div>
 <aside><div class="eyebrow">OCCUPANTS <span id="count">0/4</span></div><div id="players"></div><hr><div id="lobbyControls"><div class="eyebrow">YOUR LOCKER</div><p>Design your own character. Everyone in the room will see it.</p><button id="editAvatar" class="primary">✎ OPEN CHARACTER EDITOR</button><button id="start" class="primary">START EXPERIMENT →</button><p id="startNote" class="muted">Only the host can start. Two players required.</p></div><div id="puzzleControls" hidden><div class="eyebrow">OBJECTIVE</div><p>Activate both pressure plates simultaneously.</p><p id="plates">○ PLATE 01 / ○ PLATE 02</p><button id="hint">SHOW HINT</button><p id="hintText" hidden></p><button id="reset">RESTART CHAMBER</button></div><hr><div class="eyebrow">CONTROLS</div><p>WASD / ARROW KEYS<br>Move in the locker room and puzzles</p></aside></div></section>
 <div id="editor" class="modal" hidden><div class="editorPanel"><div class="editorHead"><div><div class="eyebrow">LOCKER / CHARACTER STUDIO</div><h2>DRAW YOURSELF.</h2></div><button id="closeEditor" aria-label="Close editor">✕</button></div><p>Paint a 32 × 32 sprite. Use the grayscale palette. Transparent pixels show the floor beneath.</p><div class="editorBody"><canvas id="paint" width="320" height="320" aria-label="Pixel art drawing canvas"></canvas><div class="tools"><div class="eyebrow">INK</div><div id="palette"></div><button id="eraser">ERASER</button><button id="clear">CLEAR CANVAS</button><button id="default">USE DEFAULT</button><button id="saveAvatar" class="primary">SAVE CHARACTER →</button></div></div></div></div>
-<footer>B100 / PROTOTYPE <span>ESCAPE IS A SHARED RESPONSIBILITY.</span></footer></div><script>// Offline preview transport: create/join and a simulated teammate in one HTML file.
-const NativeWebSocket=window.WebSocket;
+<footer>B100 / PROTOTYPE <span>ESCAPE IS A SHARED RESPONSIBILITY.</span></footer></div><script>// Offline HTML preview: simulated cooperative partner.
 class PreviewSocket {
- constructor(){this.readyState=0;this.id=1;this.started=false;this.level=1;this.code='DEMO1';this.name='PLAYER';this.avatar=null;this.bot=null;setTimeout(()=>{this.readyState=1;this.onopen?.()},25)}
- send(raw){const m=JSON.parse(raw);if(m.type==='create'||m.type==='join'){this.name=m.name;this.avatar=m.avatar;this.code=m.code||'DEMO1';this.emit({type:'welcome',id:1});this.state();return}if(m.type==='avatar'){this.avatar=m.avatar;this.state()}if(m.type==='start'){this.started=true;this.state()}if(m.type==='next'){this.level=Math.min(100,this.level+1);this.state()}if(m.type==='reset')this.state();if(m.type==='move'){this.x=m.x;this.y=m.y;this.state()}}
+ constructor(){this.readyState=0;this.started=false;this.level=1;this.code='DEMO1';this.name='PLAYER';this.avatar=null;this.x=2.5;this.y=4.5;this.bx=3.1;this.by=4.5;this.solved=false;this.lastBroadcast=0;this.botTimer=setInterval(()=>this.tick(),80);setTimeout(()=>{this.readyState=1;this.onopen?.()},25)}
+ map(){const maps=[
+ {name:'THE FIRST STEP',hint:'The bot will hold plate 02. You stand on plate 01.',plates:[[3,3],[10,6]],walls:[]},
+ {name:'THE DIVIDE',hint:'The bot finds a path to plate 02. You stand on plate 01.',plates:[[2,6],[11,2]],walls:[[6,2],[6,3],[6,4],[6,5],[6,6]]},
+ {name:'SEPARATION',hint:'The bot handles the far plate. You handle the near plate.',plates:[[2,2],[11,6]],walls:[[4,1],[4,2],[4,3],[4,4],[4,5],[8,3],[8,4],[8,5],[8,6]]},
+ {name:'CROSS CURRENT',hint:'You stand on plate 01 while the bot reaches plate 02.',plates:[[2,6],[11,2]],walls:[[4,2],[5,2],[6,2],[7,2],[8,2],[9,2],[4,5],[5,5],[6,5],[7,5],[8,5],[9,5]]},
+ {name:'THE LAST PAIR',hint:'Hold plate 01. The bot will hold plate 02.',plates:[[2,2],[11,6]],walls:[[3,4],[4,4],[5,4],[8,4],[9,4],[10,4]]}
+ ];return maps[(this.level-1)%maps.length]}
  emit(o){setTimeout(()=>this.onmessage?.({data:JSON.stringify(o)}),0)}
- state(){const maps=[{name:'THE FIRST STEP',hint:'Stand on both plates together.',plates:[[3,3],[10,6]],walls:[]},{name:'THE DIVIDE',hint:'Find the two distant switches.',plates:[[2,6],[11,2]],walls:[[6,2],[6,3],[6,4],[6,5],[6,6]]}];this.emit({type:'state',code:this.code,started:this.started,level:this.level,layout:maps[(this.level-1)%maps.length],players:[{id:1,name:this.name,x:this.x||2.5,y:this.y||4.5,avatar:this.avatar},{id:2,name:'DEMO PARTNER',x:3.1,y:4.5,avatar:null}],host:1,active:[false,false],solved:false})}
- close(){this.readyState=3;this.onclose?.()}
+ send(raw){const m=JSON.parse(raw);if(m.type==='create'||m.type==='join'){this.name=m.name;this.avatar=m.avatar;this.code=m.code||'DEMO1';this.emit({type:'welcome',id:1});this.state();return}
+ if(m.type==='avatar'){this.avatar=m.avatar;this.state()}
+ if(m.type==='start'){this.started=true;this.state()}
+ if(m.type==='next'&&this.solved){this.level=Math.min(100,this.level+1);this.reset();this.state()}
+ if(m.type==='reset'){this.reset();this.state()}
+ if(m.type==='move'){this.x=m.x;this.y=m.y;this.state()}}
+ reset(){this.solved=false;this.x=2.5;this.y=4.5;this.bx=3.1;this.by=4.5}
+ route(){const m=this.map(),target=m.plates[1],tx=target[0],ty=target[1],blocked=new Set(m.walls.map(([x,y])=>x+','+y));
+ const start=[Math.max(1,Math.min(12,Math.floor(this.bx))),Math.max(1,Math.min(6,Math.floor(this.by)))];
+ const queue=[start],seen=new Set([start.join(',')]),prev=new Map();let found=false;
+ for(let i=0;i<queue.length;i++){const [x,y]=queue[i];if(x===tx&&y===ty){found=true;break}for(const [dx,dy] of [[1,0],[0,1],[-1,0],[0,-1]]){const nx=x+dx,ny=y+dy,key=nx+','+ny;if(nx<1||nx>12||ny<1||ny>6||blocked.has(key)||seen.has(key))continue;seen.add(key);prev.set(key,[x,y]);queue.push([nx,ny])}}
+ if(!found)return [this.bx,this.by];let node=[tx,ty],key=node.join(',');while(prev.has(key)){const parent=prev.get(key);if(parent[0]===start[0]&&parent[1]===start[1])break;node=parent;key=node.join(',')}return [node[0]+.5,node[1]+.5]}
+ tick(){if(!this.started||this.readyState!==1||this.solved)return;const [tx,ty]=this.route(),dx=tx-this.bx,dy=ty-this.by,dist=Math.hypot(dx,dy);if(dist>.03){const step=Math.min(dist,.18);this.bx+=dx/dist*step;this.by+=dy/dist*step}this.state()}
+ state(){const m=this.map();const players=[{id:1,name:this.name,x:this.x,y:this.y,avatar:this.avatar},{id:2,name:'HELPER BOT',x:this.bx,y:this.by,avatar:null}];const active=m.plates.map(([x,y])=>players.some(p=>Math.hypot(p.x-x-.5,p.y-y-.5)<.58));if(this.started&&active.every(Boolean))this.solved=true;this.emit({type:'state',code:this.code,started:this.started,level:this.level,layout:m,players,host:1,active,solved:this.solved})}
+ close(){clearInterval(this.botTimer);this.readyState=3;this.onclose?.()}
 }
 window.WebSocket=PreviewSocket;
 const $=id=>document.getElementById(id),canvas=$('board'),ctx=canvas.getContext('2d'),paint=$('paint'),pc=paint.getContext('2d'),T=72,OX=56,OY=32,colors=['#000000','#555657','#999b99','#e7e5df'],keys=new Set(),cache=new Map();let ws,id,room,px=null,py=null,lastSend=0,last=performance.now(),ink=3,drag=false;
